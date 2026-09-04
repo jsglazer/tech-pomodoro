@@ -10,6 +10,7 @@ import TechPomodoroCore
 final class StatusItemPresenter: MenuBarPresenting {
     private let statusItem: NSStatusItem
     private var lastApplied: MenuBarPresentation?
+    private var lastTooltip: String?
     private var flashWorkItems: [DispatchWorkItem] = []
 
     /// Each blink is an on/off pair at 250ms; how many of them is the user's setting.
@@ -17,6 +18,14 @@ final class StatusItemPresenter: MenuBarPresenting {
 
     init(statusItem: NSStatusItem) {
         self.statusItem = statusItem
+    }
+
+    /// The tooltip changes every second, so it is set outside `apply` — a new countdown string must
+    /// not force the title or image to be rebuilt.
+    func setTooltip(_ text: String) {
+        guard text != lastTooltip else { return }
+        lastTooltip = text
+        statusItem.button?.toolTip = text
     }
 
     func apply(_ presentation: MenuBarPresentation) {

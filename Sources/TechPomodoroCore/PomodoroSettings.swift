@@ -39,6 +39,11 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
     public var useCustomTextColor: Bool
     /// `#RRGGBB`. Ignored unless `useCustomTextColor` is on, and never overrides a threshold colour.
     public var menuBarTextColorHex: String
+    /// Colour the menu bar during the rest phases (Rest, Long Break, Session Rest) so a glance says
+    /// which side of the schedule you are on.
+    public var useRestColor: Bool
+    /// `#RRGGBB` for the rest phases. Ignored unless `useRestColor` is on.
+    public var restColorHex: String
 
     public var dingEnabled: Bool
     /// How many times the ding repeats at a boundary.
@@ -64,6 +69,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         useCustomBackground: Bool = false,
         useCustomTextColor: Bool = false,
         menuBarTextColorHex: String = "#22D3EE",
+        useRestColor: Bool = true,
+        restColorHex: String = "#22C55E",
         dingEnabled: Bool = true,
         dingRepeatCount: Int = 1,
         flashEnabled: Bool = true,
@@ -85,6 +92,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         self.useCustomBackground = useCustomBackground
         self.useCustomTextColor = useCustomTextColor
         self.menuBarTextColorHex = menuBarTextColorHex
+        self.useRestColor = useRestColor
+        self.restColorHex = restColorHex
         self.dingEnabled = dingEnabled
         self.dingRepeatCount = max(1, dingRepeatCount)
         self.flashEnabled = flashEnabled
@@ -129,6 +138,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
             useCustomBackground: try value(.useCustomBackground, d.useCustomBackground),
             useCustomTextColor: try value(.useCustomTextColor, d.useCustomTextColor),
             menuBarTextColorHex: try value(.menuBarTextColorHex, d.menuBarTextColorHex),
+            useRestColor: try value(.useRestColor, d.useRestColor),
+            restColorHex: try value(.restColorHex, d.restColorHex),
             dingEnabled: try value(.dingEnabled, d.dingEnabled),
             dingRepeatCount: try value(.dingRepeatCount, d.dingRepeatCount),
             flashEnabled: try value(.flashEnabled, d.flashEnabled),

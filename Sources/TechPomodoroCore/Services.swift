@@ -24,6 +24,8 @@ public protocol MenuBarPresenting: AnyObject {
     func apply(_ presentation: MenuBarPresentation)
     /// Blinks the item `times` times. A new request replaces a flash still in flight.
     func flash(times: Int)
+    /// Sets the hover tooltip. Called on every refresh, so implementations must ignore a repeat.
+    func setTooltip(_ text: String)
 }
 
 /// Launch-at-login, behind a protocol because `SMAppService` only behaves inside a registered bundle.

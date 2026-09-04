@@ -68,7 +68,7 @@ public enum MenuBarFormatter {
         switch settings.menuBarMode {
         case .clockIcon:
             // Clock-icon mode ignores the thresholds entirely.
-            let custom = settings.useCustomTextColor ? settings.menuBarTextColorHex : nil
+            let custom = restHex(for: state) ?? (settings.useCustomTextColor ? settings.menuBarTextColorHex : nil)
             return MenuBarPresentation(
                 symbolName: state.activity == .paused ? "pause.circle" : "timer",
                 foreground: .primaryText,
@@ -83,8 +83,11 @@ public enum MenuBarFormatter {
             // A threshold colour is the whole point of the threshold, so it always wins; otherwise
             // the countdown adopts the menu bar's own colour like any other item.
             let isThreshold = token == .warning || token == .alert
-            // A chosen colour applies to the ordinary countdown only; a threshold still wins.
-            let custom = (settings.useCustomTextColor && !isThreshold) ? settings.menuBarTextColorHex : nil
+            // A chosen colour applies to the ordinary countdown only; a threshold still wins. The
+            // rest colour outranks the general custom colour, since it is the more specific signal —
+            // and it can never collide with a threshold, which is Work-only.
+            let custom = restHex(for: state)
+                ?? ((settings.useCustomTextColor && !isThreshold) ? settings.menuBarTextColorHex : nil)
             return MenuBarPresentation(
                 text: minutesText(remaining),
                 symbolName: nil,
@@ -100,6 +103,24 @@ public enum MenuBarFormatter {
     /// becomes "0" in the last second.
     public static func minutesText(_ remaining: TimeInterval) -> String {
         String(Int(ceil(max(0, remaining) / 60)))
+    }
+
+    /// The rest-phase colour, when the user enabled it and the timer is in one of the rest phases.
+    private static func restHex(for state: PomodoroState) -> String? {
+        guard state.settings.useRestColor, state.phase != .work else { return nil }
+        return state.settings.restColorHex
+    }
+
+    /// What the status item says on hover: the phase and the exact time left, e.g. `Work 24:31`.
+    /// Pure, so the wording and the zero-padding are pinned by tests rather than by eyeballing a
+    /// tooltip.
+    public static func hoverText(for state: PomodoroState, at now: Date) -> String {
+        guard state.activity != .idle else { return "tech-pomodoro — Ready" }
+
+        let remaining = Int(max(0, state.remaining(at: now)).rounded(.up))
+        let clock = String(format: "%02d:%02d", remaining / 60, remaining % 60)
+        let prefix = state.activity == .paused ? "Paused — " : ""
+        return "\(prefix)\(state.phase.title) \(clock)"
     }
 
     /// Threshold colours apply to Work only, in minutes-remaining mode only; a threshold of `0`

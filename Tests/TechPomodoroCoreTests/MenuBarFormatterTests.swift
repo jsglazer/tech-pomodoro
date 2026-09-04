@@ -157,6 +157,87 @@ struct MenuBarFormatterTests {
         #expect(MenuBarFormatter.presentation(for: state, at: now).customForegroundHex == "#FF8800")
     }
 
+    @Test("Hover text names the phase and the exact time left, zero-padded")
+    func hoverTextWhileRunning() {
+        let state = PomodoroState(settings: Fixture.settings())
+            .applying([(.start, Fixture.start)])
+
+        #expect(MenuBarFormatter.hoverText(for: state, at: Fixture.start) == "Work 25:00")
+        #expect(MenuBarFormatter.hoverText(for: state, at: Fixture.start.plus(minutes: 20, seconds: 51)) == "Work 04:09")
+        #expect(MenuBarFormatter.hoverText(for: state, at: Fixture.start.plus(minutes: 24, seconds: 55)) == "Work 00:05")
+    }
+
+    @Test("Hover text names the rest phases too")
+    func hoverTextDuringRest() {
+        let state = PomodoroState(settings: Fixture.settings())
+            .applying([
+                (.start, Fixture.start),
+                (.tick, Fixture.start.plus(minutes: 25))
+            ])
+
+        #expect(MenuBarFormatter.hoverText(for: state, at: Fixture.start.plus(minutes: 27)) == "Rest 03:00")
+    }
+
+    @Test("Hover text says Ready when idle and marks a pause")
+    func hoverTextIdleAndPaused() {
+        #expect(MenuBarFormatter.hoverText(for: PomodoroState(), at: Fixture.start) == "tech-pomodoro — Ready")
+
+        let paused = PomodoroState(settings: Fixture.settings())
+            .applying([
+                (.start, Fixture.start),
+                (.pause, Fixture.start.plus(minutes: 10))
+            ])
+        #expect(MenuBarFormatter.hoverText(for: paused, at: Fixture.start.plus(minutes: 45)) == "Paused — Work 15:00")
+    }
+
+    @Test("The rest phases take the rest colour, Work does not")
+    func restColourAppliesToRestPhases() {
+        var settings = Fixture.settings()
+        settings.restColorHex = "#22C55E"
+
+        for phase in [Phase.rest, .longBreak, .sessionRest] {
+            let (state, now) = running(remainingMinutes: 4, phase: phase, settings: settings)
+            #expect(MenuBarFormatter.presentation(for: state, at: now).customForegroundHex == "#22C55E")
+        }
+
+        let (work, workNow) = running(remainingMinutes: 20, settings: settings)
+        #expect(MenuBarFormatter.presentation(for: work, at: workNow).customForegroundHex == nil)
+    }
+
+    @Test("Turning the rest colour off hands the rest phases back to the menu bar")
+    func restColourCanBeDisabled() {
+        var settings = Fixture.settings()
+        settings.useRestColor = false
+
+        let (state, now) = running(remainingMinutes: 4, phase: .rest, settings: settings)
+        let presentation = MenuBarFormatter.presentation(for: state, at: now)
+
+        #expect(presentation.customForegroundHex == nil)
+        #expect(presentation.adaptsToMenuBar)
+    }
+
+    @Test("The rest colour outranks the general custom text colour")
+    func restColourBeatsCustomColour() {
+        var settings = Fixture.settings()
+        settings.useCustomTextColor = true
+        settings.menuBarTextColorHex = "#FF8800"
+        settings.restColorHex = "#22C55E"
+
+        let (rest, restNow) = running(remainingMinutes: 4, phase: .rest, settings: settings)
+        #expect(MenuBarFormatter.presentation(for: rest, at: restNow).customForegroundHex == "#22C55E")
+
+        let (work, workNow) = running(remainingMinutes: 20, settings: settings)
+        #expect(MenuBarFormatter.presentation(for: work, at: workNow).customForegroundHex == "#FF8800")
+    }
+
+    @Test("Green rest colouring is on out of the box")
+    func restColourDefaults() {
+        let settings = PomodoroSettings()
+
+        #expect(settings.useRestColor)
+        #expect(settings.restColorHex == "#22C55E")
+    }
+
     @Test("The background token appears only when a custom background is enabled")
     func backgroundIsOptIn() {
         var settings = Fixture.settings()

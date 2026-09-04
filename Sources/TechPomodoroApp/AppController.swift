@@ -134,11 +134,22 @@ final class AppController: ObservableObject {
 
     /// The menu bar text colour, as a SwiftUI binding for the settings picker.
     var menuBarTextColor: Binding<Color> {
+        hexBinding(\.menuBarTextColorHex)
+    }
+
+    /// The rest-phase colour, as a SwiftUI binding for the settings picker.
+    var restColor: Binding<Color> {
+        hexBinding(\.restColorHex)
+    }
+
+    /// Bridges a `ColorPicker` to a `#RRGGBB` settings field, so a selection persists as the same
+    /// hex the menu bar parses back.
+    private func hexBinding(_ keyPath: WritableKeyPath<PomodoroSettings, String>) -> Binding<Color> {
         Binding(
-            get: { Color(nsColor: Theme.color(hexString: self.state.settings.menuBarTextColorHex)) },
+            get: { Color(nsColor: Theme.color(hexString: self.state.settings[keyPath: keyPath])) },
             set: { newValue in
                 var settings = self.state.settings
-                settings.menuBarTextColorHex = Theme.hexString(NSColor(newValue))
+                settings[keyPath: keyPath] = Theme.hexString(NSColor(newValue))
                 self.update(settings: settings)
             }
         )
@@ -185,6 +196,7 @@ final class AppController: ObservableObject {
 
     private func refreshPresentation() {
         presenter?.apply(MenuBarFormatter.presentation(for: state, at: displayNow))
+        presenter?.setTooltip(MenuBarFormatter.hoverText(for: state, at: displayNow))
     }
 
     // MARK: - Export

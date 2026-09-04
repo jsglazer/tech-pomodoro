@@ -28,6 +28,18 @@ struct SettingsTabView: View {
             .disabled(!controller.settings.useCustomTextColor)
             .opacity(controller.settings.useCustomTextColor ? 1 : 0.4)
 
+            Toggle("Colour the rest phases", isOn: controller.bind(\.useRestColor))
+                .toggleStyle(.switch)
+
+            HStack {
+                Text("Rest colour").foregroundStyle(Color.tpDimmed)
+                Spacer()
+                ColorPicker("", selection: controller.restColor, supportsOpacity: false)
+                    .labelsHidden()
+            }
+            .disabled(!controller.settings.useRestColor)
+            .opacity(controller.settings.useRestColor ? 1 : 0.4)
+
             Group {
                 thresholdStepper("Warning at", controller.bind(\.warningThresholdMinutes))
                 thresholdStepper("Alert at", controller.bind(\.alertThresholdMinutes))
