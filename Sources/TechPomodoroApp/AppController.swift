@@ -197,6 +197,7 @@ final class AppController: ObservableObject {
     private func refreshPresentation() {
         presenter?.apply(MenuBarFormatter.presentation(for: state, at: displayNow))
         presenter?.setTooltip(MenuBarFormatter.hoverText(for: state, at: displayNow))
+        presenter?.setHoverInfo(MenuBarFormatter.hoverInfo(for: state, at: displayNow))
     }
 
     // MARK: - Export

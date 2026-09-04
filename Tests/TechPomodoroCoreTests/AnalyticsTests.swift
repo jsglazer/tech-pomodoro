@@ -64,6 +64,23 @@ struct AnalyticsTests {
         #expect(summary.today.cycles == 2)
     }
 
+    @Test("Sessions that reached their Session Rest are counted per window")
+    func sessionsCounted() {
+        let day = 24.0 * 60
+        let records = [
+            IntervalRecord(kind: .sessionCompleted, startedAt: Fixture.start, elapsedSeconds: 0, completed: true),
+            IntervalRecord(kind: .sessionCompleted, startedAt: Fixture.start.plus(minutes: -2 * day), elapsedSeconds: 0, completed: true),
+            IntervalRecord(kind: .sessionCompleted, startedAt: Fixture.start.plus(minutes: -4 * day), elapsedSeconds: 0, completed: true),
+            cycle(Fixture.start)
+        ]
+        let summary = AnalyticsAggregator.summarize(records: records, now: Fixture.start, calendar: Fixture.calendar)
+
+        #expect(summary.today.sessions == 1)
+        #expect(summary.lastThreeDays.sessions == 2)
+        #expect(summary.lastFiveDays.sessions == 3)
+        #expect(summary.today.cycles == 1)
+    }
+
     @Test("Partial work intervals count toward total work time")
     func partialsCount() {
         let records = [work(Fixture.start, minutes: 25), work(Fixture.start.plus(minutes: 40), minutes: 7, completed: false)]

@@ -91,6 +91,17 @@ struct TransitionTests {
         #expect(state.phaseEndsAt == Fixture.start.plus(minutes: 260))
     }
 
+    @Test("Reaching the Session Rest logs the completed session")
+    func sessionRestLogsTheSession() {
+        let state = PomodoroState(settings: Fixture.settings())
+            .applying([
+                (.start, Fixture.start),
+                (.tick, Fixture.start.plus(minutes: 200))
+            ])
+
+        #expect(state.pendingRecords.filter { $0.kind == .sessionCompleted }.count == 1)
+    }
+
     @Test("A non-repeating session finishes into idle with one completion alert")
     func sessionRestEndsIntoIdle() {
         let state = PomodoroState(settings: Fixture.settings())

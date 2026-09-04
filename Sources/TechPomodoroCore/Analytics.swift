@@ -1,11 +1,13 @@
 import Foundation
 
-/// Cycles completed and seconds worked inside one rolling window.
+/// Sessions and cycles completed, and seconds worked, inside one rolling window.
 public struct AnalyticsWindow: Sendable, Equatable {
+    public let sessions: Int
     public let cycles: Int
     public let workSeconds: Int
 
-    public init(cycles: Int, workSeconds: Int) {
+    public init(sessions: Int = 0, cycles: Int, workSeconds: Int) {
+        self.sessions = sessions
         self.cycles = cycles
         self.workSeconds = workSeconds
     }
@@ -24,9 +26,9 @@ public struct AnalyticsSummary: Sendable, Equatable {
     public let lastFiveDays: AnalyticsWindow
 
     public static let empty = AnalyticsSummary(
-        today: AnalyticsWindow(cycles: 0, workSeconds: 0),
-        lastThreeDays: AnalyticsWindow(cycles: 0, workSeconds: 0),
-        lastFiveDays: AnalyticsWindow(cycles: 0, workSeconds: 0)
+        today: AnalyticsWindow(sessions: 0, cycles: 0, workSeconds: 0),
+        lastThreeDays: AnalyticsWindow(sessions: 0, cycles: 0, workSeconds: 0),
+        lastFiveDays: AnalyticsWindow(sessions: 0, cycles: 0, workSeconds: 0)
     )
 
     public init(today: AnalyticsWindow, lastThreeDays: AnalyticsWindow, lastFiveDays: AnalyticsWindow) {
@@ -63,17 +65,19 @@ public enum AnalyticsAggregator {
         days: Int
     ) -> AnalyticsWindow {
         guard let start = startOfWindow(now: now, calendar: calendar, days: days) else {
-            return AnalyticsWindow(cycles: 0, workSeconds: 0)
+            return AnalyticsWindow(sessions: 0, cycles: 0, workSeconds: 0)
         }
+        var sessions = 0
         var cycles = 0
         var seconds = 0
         for record in records where record.startedAt >= start {
             switch record.kind {
             case .work: seconds += record.elapsedSeconds
             case .cycleCompleted: cycles += 1
+            case .sessionCompleted: sessions += 1
             }
         }
-        return AnalyticsWindow(cycles: cycles, workSeconds: seconds)
+        return AnalyticsWindow(sessions: sessions, cycles: cycles, workSeconds: seconds)
     }
 
     /// Midnight at the head of the window.

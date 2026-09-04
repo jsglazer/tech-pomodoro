@@ -188,6 +188,10 @@ public enum PomodoroReducer {
             s.completedRepsInCycle = 0
             s.completedCyclesInSession += 1
             if s.completedCyclesInSession >= max(1, settings.cyclesPerSession) {
+                // The session reached its Session Rest, which is what makes it count.
+                records.append(
+                    IntervalRecord(kind: .sessionCompleted, startedAt: end, elapsedSeconds: 0, completed: true)
+                )
                 alert = .sessionEnd
                 begin(&s, phase: .sessionRest, at: end)
             } else {

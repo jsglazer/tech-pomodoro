@@ -66,8 +66,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            // The flash must not fight the popover for the button's appearance.
+            // The flash must not fight the popover for the button's appearance, and the hover
+            // readout would sit on top of it.
             presenter?.cancelFlash()
+            presenter?.hideHoverPanel()
             controller?.refreshAnalytics()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()

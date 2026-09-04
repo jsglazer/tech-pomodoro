@@ -46,6 +46,17 @@ public struct MenuBarPresentation: Sendable, Equatable {
     }
 }
 
+/// The two lines of the hover readout: the phase, and the time left.
+public struct HoverInfo: Sendable, Equatable {
+    public let title: String
+    public let detail: String
+
+    public init(title: String, detail: String) {
+        self.title = title
+        self.detail = detail
+    }
+}
+
 /// Maps `(state, now)` onto an abstract menu bar appearance.
 ///
 /// Pure, so the threshold rules are unit-testable to the second, and cheap, so the shell can call it
@@ -109,6 +120,18 @@ public enum MenuBarFormatter {
     private static func restHex(for state: PomodoroState) -> String? {
         guard state.settings.useRestColor, state.phase != .work else { return nil }
         return state.settings.restColorHex
+    }
+
+    /// The hover readout, split into its parts so the shell can typeset the phase and the countdown
+    /// at different sizes.
+    public static func hoverInfo(for state: PomodoroState, at now: Date) -> HoverInfo {
+        guard state.activity != .idle else {
+            return HoverInfo(title: "Ready", detail: "--:--")
+        }
+        let remaining = Int(max(0, state.remaining(at: now)).rounded(.up))
+        let clock = String(format: "%02d:%02d", remaining / 60, remaining % 60)
+        let title = state.activity == .paused ? "Paused — \(state.phase.title)" : state.phase.title
+        return HoverInfo(title: title, detail: clock)
     }
 
     /// What the status item says on hover: the phase and the exact time left, e.g. `Work 24:31`.

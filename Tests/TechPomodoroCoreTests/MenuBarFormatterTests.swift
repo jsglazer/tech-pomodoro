@@ -190,6 +190,25 @@ struct MenuBarFormatterTests {
         #expect(MenuBarFormatter.hoverText(for: paused, at: Fixture.start.plus(minutes: 45)) == "Paused — Work 15:00")
     }
 
+    @Test("Hover info splits the phase from the countdown for the larger readout")
+    func hoverInfoParts() {
+        let state = PomodoroState(settings: Fixture.settings())
+            .applying([(.start, Fixture.start)])
+
+        let running = MenuBarFormatter.hoverInfo(for: state, at: Fixture.start.plus(minutes: 20, seconds: 51))
+        #expect(running.title == "Work")
+        #expect(running.detail == "04:09")
+
+        let idle = MenuBarFormatter.hoverInfo(for: PomodoroState(), at: Fixture.start)
+        #expect(idle.title == "Ready")
+        #expect(idle.detail == "--:--")
+
+        let paused = state.applying([(.pause, Fixture.start.plus(minutes: 10))])
+        let pausedInfo = MenuBarFormatter.hoverInfo(for: paused, at: Fixture.start.plus(minutes: 90))
+        #expect(pausedInfo.title == "Paused — Work")
+        #expect(pausedInfo.detail == "15:00")
+    }
+
     @Test("The rest phases take the rest colour, Work does not")
     func restColourAppliesToRestPhases() {
         var settings = Fixture.settings()

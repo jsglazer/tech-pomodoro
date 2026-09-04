@@ -7,6 +7,8 @@ public struct IntervalRecord: Codable, Sendable, Equatable, Identifiable {
         case work
         /// A cycle that reached its Long Break. Carries no elapsed time.
         case cycleCompleted
+        /// A session that reached its Session Rest. Carries no elapsed time.
+        case sessionCompleted
     }
 
     public let id: UUID

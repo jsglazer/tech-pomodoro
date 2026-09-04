@@ -7,17 +7,83 @@ import TechPomodoroCore
 /// changes (a tick that leaves "24" as "24" touches nothing), and the countdown is drawn in a
 /// monospaced-digit font so the item cannot jitter as the digits change.
 @MainActor
-final class StatusItemPresenter: MenuBarPresenting {
+final class StatusItemPresenter: NSResponder, MenuBarPresenting {
     private let statusItem: NSStatusItem
     private var lastApplied: MenuBarPresentation?
     private var lastTooltip: String?
     private var flashWorkItems: [DispatchWorkItem] = []
+
+    private let hoverPanel = HoverPanelController()
+    /// The current readout, refreshed every tick so the panel counts down while it is open.
+    private var hoverInfo = HoverInfo(title: "Ready", detail: "--:--")
 
     /// Each blink is an on/off pair at 250ms; how many of them is the user's setting.
     private static let flashInterval: TimeInterval = 0.25
 
     init(statusItem: NSStatusItem) {
         self.statusItem = statusItem
+        super.init()
+        installHoverTracking()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not used")
+    }
+
+    // MARK: - Hover
+
+    /// The audit's "no NSTrackingArea on the status item" rule was written to keep the *analytics*
+    /// panel from depending on hover. This one is a deliberate exception: a hover readout has no
+    /// other trigger. It fails safe — the system tooltip stays installed and takes over whenever the
+    /// tracking area does not fire, and is suppressed only while our own panel is actually up.
+    private func installHoverTracking() {
+        guard let button = statusItem.button else { return }
+        button.addTrackingArea(
+            NSTrackingArea(
+                rect: .zero,
+                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+        )
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        showHoverPanel()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hideHoverPanel()
+    }
+
+    func showHoverPanel() {
+        guard let button = statusItem.button else { return }
+        // Our panel and the system tooltip must never both be up.
+        button.toolTip = nil
+        hoverPanel.show(info: hoverInfo, color: hoverColor, below: button)
+    }
+
+    func hideHoverPanel() {
+        hoverPanel.hide()
+        statusItem.button?.toolTip = lastTooltip
+    }
+
+    /// The countdown in the panel is drawn in whatever colour the menu bar is using, so the rest
+    /// green and the threshold colours read the same in both places.
+    private var hoverColor: NSColor {
+        guard let presentation = lastApplied else { return Theme.primaryText }
+        if let hex = presentation.customForegroundHex { return Theme.color(hexString: hex) }
+        return presentation.adaptsToMenuBar ? Theme.primaryText : Theme.color(presentation.foreground)
+    }
+
+    /// Called every refresh with the current readout.
+    func setHoverInfo(_ info: HoverInfo) {
+        guard info != hoverInfo else { return }
+        hoverInfo = info
+        if hoverPanel.isVisible {
+            hoverPanel.update(info: info, color: hoverColor)
+        }
     }
 
     /// The tooltip changes every second, so it is set outside `apply` — a new countdown string must
@@ -25,7 +91,10 @@ final class StatusItemPresenter: MenuBarPresenting {
     func setTooltip(_ text: String) {
         guard text != lastTooltip else { return }
         lastTooltip = text
-        statusItem.button?.toolTip = text
+        // While the panel is up it is the readout; the tooltip is only the fallback.
+        if !hoverPanel.isVisible {
+            statusItem.button?.toolTip = text
+        }
     }
 
     func apply(_ presentation: MenuBarPresentation) {
@@ -50,15 +119,23 @@ final class StatusItemPresenter: MenuBarPresenting {
         let color = dimmed ? base.withAlphaComponent(0.15) : base
 
         if let text = presentation.text {
-            button.image = nil
-            button.attributedTitle = NSAttributedString(
-                string: text,
-                attributes: [
-                    .foregroundColor: color,
-                    // Monospaced digits: a fixed-width title that never reflows the menu bar.
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: 15, weight: .medium)
-                ]
-            )
+            let attributes: [NSAttributedString.Key: Any] = [
+                .foregroundColor: color,
+                // Monospaced digits: a fixed-width title that never reflows the menu bar.
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 15, weight: .medium)
+            ]
+
+            if presentation.adaptsToMenuBar {
+                button.image = nil
+                button.attributedTitle = NSAttributedString(string: text, attributes: attributes)
+            } else {
+                // A status item button re-tints its *title* with the menu bar's own colour, which
+                // silently discards an attributed foreground colour — that is why the threshold and
+                // rest colours never appeared. Drawing the digits into a non-template image instead
+                // puts the colour beyond AppKit's reach.
+                button.attributedTitle = NSAttributedString(string: "")
+                button.image = Self.image(of: text, attributes: attributes)
+            }
         } else if let symbolName = presentation.symbolName {
             button.attributedTitle = NSAttributedString(string: "")
             let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "tech-pomodoro")
@@ -112,6 +189,24 @@ final class StatusItemPresenter: MenuBarPresenting {
         if let presentation = lastApplied {
             render(presentation, dimmed: false)
         }
+    }
+}
+
+private extension StatusItemPresenter {
+    /// Renders a menu bar title into an image, so its colour survives the status bar's tinting.
+    static func image(of text: String, attributes: [NSAttributedString.Key: Any]) -> NSImage {
+        let string = NSAttributedString(string: text, attributes: attributes)
+        let measured = string.size()
+        // A whole number of points, with a little side padding, keeps the item from shifting as the
+        // digit count changes.
+        let size = NSSize(width: ceil(measured.width) + 4, height: max(16, ceil(measured.height)))
+
+        let image = NSImage(size: size, flipped: false) { rect in
+            string.draw(at: NSPoint(x: 2, y: (rect.height - measured.height) / 2))
+            return true
+        }
+        image.isTemplate = false
+        return image
     }
 }
 
