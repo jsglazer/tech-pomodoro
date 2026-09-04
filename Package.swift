@@ -27,6 +27,9 @@ let package = Package(
         .executableTarget(
             name: "TechPomodoroApp",
             dependencies: ["TechPomodoroCore"],
+            resources: [
+                .process("Resources")
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
             ]
