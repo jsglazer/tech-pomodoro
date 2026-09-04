@@ -12,8 +12,7 @@ final class StatusItemPresenter: MenuBarPresenting {
     private var lastApplied: MenuBarPresentation?
     private var flashWorkItems: [DispatchWorkItem] = []
 
-    /// The flash is exactly three on/off pairs at 250ms.
-    private static let flashCount = 3
+    /// Each blink is an on/off pair at 250ms; how many of them is the user's setting.
     private static let flashInterval: TimeInterval = 0.25
 
     init(statusItem: NSStatusItem) {
@@ -31,7 +30,14 @@ final class StatusItemPresenter: MenuBarPresenting {
         // When the presentation adapts, macOS owns the colour: a template image and a label-coloured
         // title stay legible on a light menu bar and match the items either side. Only a threshold
         // colour or our own filled background takes the colour into our hands.
-        let base = presentation.adaptsToMenuBar ? NSColor.labelColor : Theme.color(presentation.foreground)
+        let base: NSColor
+        if let hex = presentation.customForegroundHex {
+            base = Theme.color(hexString: hex)
+        } else if presentation.adaptsToMenuBar {
+            base = NSColor.labelColor
+        } else {
+            base = Theme.color(presentation.foreground)
+        }
         let color = dimmed ? base.withAlphaComponent(0.15) : base
 
         if let text = presentation.text {
@@ -41,7 +47,7 @@ final class StatusItemPresenter: MenuBarPresenting {
                 attributes: [
                     .foregroundColor: color,
                     // Monospaced digits: a fixed-width title that never reflows the menu bar.
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: 15, weight: .medium)
                 ]
             )
         } else if let symbolName = presentation.symbolName {
@@ -67,11 +73,12 @@ final class StatusItemPresenter: MenuBarPresenting {
 
     /// Blinks the status item. A new request cancels the one in flight and restores the normal
     /// appearance first, so flashes can never queue up or leave the item stuck dimmed.
-    func flash() {
+    func flash(times: Int) {
         cancelFlash()
         guard let presentation = lastApplied else { return }
+        let blinks = max(1, times)
 
-        for step in 0..<(Self.flashCount * 2) {
+        for step in 0..<(blinks * 2) {
             let dimmed = step % 2 == 0
             let item = DispatchWorkItem { [weak self] in
                 self?.render(presentation, dimmed: dimmed)
@@ -85,7 +92,7 @@ final class StatusItemPresenter: MenuBarPresenting {
         }
         flashWorkItems.append(restore)
         DispatchQueue.main.asyncAfter(
-            deadline: .now() + Self.flashInterval * Double(Self.flashCount * 2),
+            deadline: .now() + Self.flashInterval * Double(blinks * 2),
             execute: restore
         )
     }

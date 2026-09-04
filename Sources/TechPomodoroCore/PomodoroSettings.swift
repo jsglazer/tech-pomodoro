@@ -35,9 +35,17 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
     public var alertThresholdMinutes: Int
     /// Draw the menu bar title on a filled background instead of the bare bar.
     public var useCustomBackground: Bool
+    /// Paint the menu bar countdown in `menuBarTextColorHex` instead of letting macOS colour it.
+    public var useCustomTextColor: Bool
+    /// `#RRGGBB`. Ignored unless `useCustomTextColor` is on, and never overrides a threshold colour.
+    public var menuBarTextColorHex: String
 
     public var dingEnabled: Bool
+    /// How many times the ding repeats at a boundary.
+    public var dingRepeatCount: Int
     public var flashEnabled: Bool
+    /// How many times the menu bar icon blinks at a boundary.
+    public var flashRepeatCount: Int
     public var soundName: String
     public var launchAtLogin: Bool
     public var sleepBehavior: SleepBehavior
@@ -54,8 +62,12 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         warningThresholdMinutes: Int = 5,
         alertThresholdMinutes: Int = 3,
         useCustomBackground: Bool = false,
+        useCustomTextColor: Bool = false,
+        menuBarTextColorHex: String = "#22D3EE",
         dingEnabled: Bool = true,
+        dingRepeatCount: Int = 1,
         flashEnabled: Bool = true,
+        flashRepeatCount: Int = 3,
         soundName: String = "Glass",
         launchAtLogin: Bool = false,
         sleepBehavior: SleepBehavior = .continueThroughSleep
@@ -71,8 +83,12 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         self.warningThresholdMinutes = warningThresholdMinutes
         self.alertThresholdMinutes = alertThresholdMinutes
         self.useCustomBackground = useCustomBackground
+        self.useCustomTextColor = useCustomTextColor
+        self.menuBarTextColorHex = menuBarTextColorHex
         self.dingEnabled = dingEnabled
+        self.dingRepeatCount = max(1, dingRepeatCount)
         self.flashEnabled = flashEnabled
+        self.flashRepeatCount = max(1, flashRepeatCount)
         self.soundName = soundName
         self.launchAtLogin = launchAtLogin
         self.sleepBehavior = sleepBehavior
@@ -111,8 +127,12 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
             warningThresholdMinutes: try value(.warningThresholdMinutes, d.warningThresholdMinutes),
             alertThresholdMinutes: try value(.alertThresholdMinutes, d.alertThresholdMinutes),
             useCustomBackground: try value(.useCustomBackground, d.useCustomBackground),
+            useCustomTextColor: try value(.useCustomTextColor, d.useCustomTextColor),
+            menuBarTextColorHex: try value(.menuBarTextColorHex, d.menuBarTextColorHex),
             dingEnabled: try value(.dingEnabled, d.dingEnabled),
+            dingRepeatCount: try value(.dingRepeatCount, d.dingRepeatCount),
             flashEnabled: try value(.flashEnabled, d.flashEnabled),
+            flashRepeatCount: try value(.flashRepeatCount, d.flashRepeatCount),
             soundName: try value(.soundName, d.soundName),
             launchAtLogin: try value(.launchAtLogin, d.launchAtLogin),
             sleepBehavior: try value(.sleepBehavior, d.sleepBehavior)

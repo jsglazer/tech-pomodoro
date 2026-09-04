@@ -98,6 +98,41 @@ struct PersistenceTests {
         #expect(decoded.sleepBehavior == .continueThroughSleep)
     }
 
+    @Test("The repeat counts and the custom colour survive a settings roundtrip")
+    func repeatSettingsRoundtrip() throws {
+        let suiteName = "tech-pomodoro-tests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        var settings = PomodoroSettings()
+        settings.dingRepeatCount = 4
+        settings.flashRepeatCount = 6
+        settings.useCustomTextColor = true
+        settings.menuBarTextColorHex = "#FF8800"
+
+        let store = UserDefaultsSettingsStore(defaults: defaults)
+        store.save(settings)
+
+        #expect(store.load() == settings)
+    }
+
+    @Test("Repeat counts are clamped to at least one")
+    func repeatCountsClamped() {
+        let settings = PomodoroSettings(dingRepeatCount: 0, flashRepeatCount: -3)
+
+        #expect(settings.dingRepeatCount == 1)
+        #expect(settings.flashRepeatCount == 1)
+    }
+
+    @Test("Shipped defaults are one ding and three flashes, with no custom colour")
+    func repeatDefaults() {
+        let settings = PomodoroSettings()
+
+        #expect(settings.dingRepeatCount == 1)
+        #expect(settings.flashRepeatCount == 3)
+        #expect(settings.useCustomTextColor == false)
+    }
+
     @Test("JSON export roundtrips losslessly")
     func jsonExportRoundtrip() throws {
         let records = [work(Fixture.start, minutes: 25), IntervalRecord(kind: .cycleCompleted, startedAt: Fixture.start.plus(minutes: 85), elapsedSeconds: 0, completed: true)]

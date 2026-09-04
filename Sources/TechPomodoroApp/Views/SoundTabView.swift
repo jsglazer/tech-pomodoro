@@ -9,8 +9,17 @@ struct SoundTabView: View {
         VStack(alignment: .leading, spacing: 10) {
             Toggle("Ding at each boundary", isOn: controller.bind(\.dingEnabled))
                 .toggleStyle(.switch)
+
+            repeatStepper("Repeat ding", controller.bind(\.dingRepeatCount))
+                .disabled(!controller.settings.dingEnabled)
+                .opacity(controller.settings.dingEnabled ? 1 : 0.4)
+
             Toggle("Flash the menu bar icon", isOn: controller.bind(\.flashEnabled))
                 .toggleStyle(.switch)
+
+            repeatStepper("Repeat flash", controller.bind(\.flashRepeatCount))
+                .disabled(!controller.settings.flashEnabled)
+                .opacity(controller.settings.flashEnabled ? 1 : 0.4)
 
             Divider().overlay(Color.tpRule)
 
@@ -28,5 +37,17 @@ struct SoundTabView: View {
                 .foregroundStyle(Color.tpDimmed)
         }
         .font(.system(size: 12))
+    }
+
+    private func repeatStepper(_ label: String, _ value: Binding<Int>) -> some View {
+        HStack {
+            Text(label).foregroundStyle(Color.tpDimmed)
+            Spacer()
+            Stepper(value: value, in: 1...10) {
+                Text(value.wrappedValue == 1 ? "once" : "\(value.wrappedValue)×")
+                    .font(.system(size: 12, design: .monospaced))
+            }
+            .fixedSize()
+        }
     }
 }

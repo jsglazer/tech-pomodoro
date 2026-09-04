@@ -29,6 +29,26 @@ enum Theme {
         Color(nsColor: color(token))
     }
 
+    /// Parses a `#RRGGBB` string, falling back to the primary cyan when it does not parse — a bad
+    /// stored value must never leave the menu bar item invisible.
+    static func color(hexString: String) -> NSColor {
+        var trimmed = hexString.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("#") { trimmed.removeFirst() }
+        guard trimmed.count == 6, let value = Int(trimmed, radix: 16) else { return primaryText }
+        return hex(value)
+    }
+
+    /// `#RRGGBB` for a colour, so a picker selection round-trips through the settings blob.
+    static func hexString(_ color: NSColor) -> String {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return "#22D3EE" }
+        return String(
+            format: "#%02X%02X%02X",
+            Int((rgb.redComponent * 255).rounded()),
+            Int((rgb.greenComponent * 255).rounded()),
+            Int((rgb.blueComponent * 255).rounded())
+        )
+    }
+
     private static func hex(_ value: Int) -> NSColor {
         NSColor(
             srgbRed: CGFloat((value >> 16) & 0xFF) / 255,

@@ -120,6 +120,43 @@ struct MenuBarFormatterTests {
         #expect(MenuBarFormatter.presentation(for: state, at: now).adaptsToMenuBar == false)
     }
 
+    @Test("A custom text colour replaces the ordinary countdown colour")
+    func customTextColourApplies() {
+        var settings = Fixture.settings()
+        settings.useCustomTextColor = true
+        settings.menuBarTextColorHex = "#FF8800"
+
+        let (state, now) = running(remainingMinutes: 20, settings: settings)
+        let presentation = MenuBarFormatter.presentation(for: state, at: now)
+
+        #expect(presentation.customForegroundHex == "#FF8800")
+        #expect(presentation.adaptsToMenuBar == false)
+    }
+
+    @Test("A threshold colour still wins over the custom text colour")
+    func thresholdBeatsCustomColour() {
+        var settings = Fixture.settings()
+        settings.useCustomTextColor = true
+        settings.menuBarTextColorHex = "#FF8800"
+
+        let (state, now) = running(remainingMinutes: 2, settings: settings)
+        let presentation = MenuBarFormatter.presentation(for: state, at: now)
+
+        #expect(presentation.customForegroundHex == nil)
+        #expect(presentation.foreground == .alert)
+    }
+
+    @Test("The custom colour tints the clock icon too")
+    func customColourAppliesInIconMode() {
+        var settings = Fixture.settings()
+        settings.menuBarMode = .clockIcon
+        settings.useCustomTextColor = true
+        settings.menuBarTextColorHex = "#FF8800"
+
+        let (state, now) = running(remainingMinutes: 20, settings: settings)
+        #expect(MenuBarFormatter.presentation(for: state, at: now).customForegroundHex == "#FF8800")
+    }
+
     @Test("The background token appears only when a custom background is enabled")
     func backgroundIsOptIn() {
         var settings = Fixture.settings()

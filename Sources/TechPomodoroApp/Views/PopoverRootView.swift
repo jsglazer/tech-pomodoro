@@ -31,18 +31,19 @@ struct PopoverRootView: View {
 
             Divider().overlay(Color.tpRule)
 
-            ScrollView {
-                Group {
-                    switch tab {
-                    case .timer: TimerTabView(controller: controller)
-                    case .intervals: IntervalsTabView(controller: controller)
-                    case .settings: SettingsTabView(controller: controller)
-                    case .sound: SoundTabView(controller: controller)
-                    }
+            // No scroll view: the popover sizes itself to whichever tab is showing, so every control
+            // is reachable without scrolling.
+            Group {
+                switch tab {
+                case .timer: TimerTabView(controller: controller)
+                case .intervals: IntervalsTabView(controller: controller)
+                case .settings: SettingsTabView(controller: controller)
+                case .sound: SoundTabView(controller: controller)
                 }
-                .padding(12)
             }
-            .frame(maxHeight: 260)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
 
             Divider().overlay(Color.tpRule)
 

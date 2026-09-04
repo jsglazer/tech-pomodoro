@@ -2,7 +2,14 @@ import Foundation
 
 /// Plays the completion ding. Implemented with `NSSound` in the shell, mocked in tests.
 public protocol SoundPlaying: Sendable {
-    func play(named name: String)
+    /// Plays `name` `times` times in succession. A new request replaces any repeats still pending.
+    func play(named name: String, times: Int)
+}
+
+extension SoundPlaying {
+    public func play(named name: String) {
+        play(named: name, times: 1)
+    }
 }
 
 /// Offers the names of the system sounds that can actually be played on this machine.
@@ -15,7 +22,8 @@ public protocol SoundCatalogProviding: Sendable {
 @MainActor
 public protocol MenuBarPresenting: AnyObject {
     func apply(_ presentation: MenuBarPresentation)
-    func flash()
+    /// Blinks the item `times` times. A new request replaces a flash still in flight.
+    func flash(times: Int)
 }
 
 /// Launch-at-login, behind a protocol because `SMAppService` only behaves inside a registered bundle.

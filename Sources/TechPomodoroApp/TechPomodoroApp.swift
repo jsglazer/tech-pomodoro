@@ -50,8 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let popover = NSPopover()
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 320, height: 420)
-        popover.contentViewController = NSHostingController(rootView: PopoverRootView(controller: controller))
+        // No fixed contentSize: the hosting controller reports the SwiftUI content's own height, so
+        // a taller tab grows the popover instead of scrolling inside it.
+        let hosting = NSHostingController(rootView: PopoverRootView(controller: controller))
+        hosting.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = hosting
         self.popover = popover
 
         controller.startRefreshing()

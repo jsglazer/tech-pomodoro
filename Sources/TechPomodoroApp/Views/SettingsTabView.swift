@@ -16,6 +16,18 @@ struct SettingsTabView: View {
             Toggle("Filled background", isOn: controller.bind(\.useCustomBackground))
                 .toggleStyle(.switch)
 
+            Toggle("Custom text colour", isOn: controller.bind(\.useCustomTextColor))
+                .toggleStyle(.switch)
+
+            HStack {
+                Text("Menu bar text").foregroundStyle(Color.tpDimmed)
+                Spacer()
+                ColorPicker("", selection: controller.menuBarTextColor, supportsOpacity: false)
+                    .labelsHidden()
+            }
+            .disabled(!controller.settings.useCustomTextColor)
+            .opacity(controller.settings.useCustomTextColor ? 1 : 0.4)
+
             Group {
                 thresholdStepper("Warning at", controller.bind(\.warningThresholdMinutes))
                 thresholdStepper("Alert at", controller.bind(\.alertThresholdMinutes))
@@ -23,7 +35,7 @@ struct SettingsTabView: View {
             .disabled(controller.settings.menuBarMode == .clockIcon)
             .opacity(controller.settings.menuBarMode == .clockIcon ? 0.4 : 1)
 
-            Text("Thresholds colour the Work countdown only, in minutes mode. 0 disables one.")
+            Text("Thresholds colour the Work countdown only, in minutes mode. 0 disables one, and a threshold always wins over the custom colour.")
                 .font(.caption2)
                 .foregroundStyle(Color.tpDimmed)
 

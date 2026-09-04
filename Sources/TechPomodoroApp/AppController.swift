@@ -129,7 +129,19 @@ final class AppController: ObservableObject {
     }
 
     func previewSound() {
-        soundPlayer.play(named: state.settings.soundName)
+        soundPlayer.play(named: state.settings.soundName, times: state.settings.dingRepeatCount)
+    }
+
+    /// The menu bar text colour, as a SwiftUI binding for the settings picker.
+    var menuBarTextColor: Binding<Color> {
+        Binding(
+            get: { Color(nsColor: Theme.color(hexString: self.state.settings.menuBarTextColorHex)) },
+            set: { newValue in
+                var settings = self.state.settings
+                settings.menuBarTextColorHex = Theme.hexString(NSColor(newValue))
+                self.update(settings: settings)
+            }
+        )
     }
 
     // MARK: - Effects
@@ -138,10 +150,10 @@ final class AppController: ObservableObject {
         for effect in effects {
             guard case .alert = effect else { continue }
             if state.settings.dingEnabled {
-                soundPlayer.play(named: state.settings.soundName)
+                soundPlayer.play(named: state.settings.soundName, times: state.settings.dingRepeatCount)
             }
             if state.settings.flashEnabled {
-                presenter?.flash()
+                presenter?.flash(times: state.settings.flashRepeatCount)
             }
         }
     }

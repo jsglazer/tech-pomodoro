@@ -1,12 +1,32 @@
 import AppKit
 import TechPomodoroCore
 
-/// Plays the completion ding through `NSSound`.
-final class SystemSoundPlayer: SoundPlaying, @unchecked Sendable {
-    func play(named name: String) {
-        // A name that no longer resolves must not silence the alert entirely.
-        let sound = NSSound(named: name) ?? NSSound(named: SystemSoundCatalog.fallbackName)
-        sound?.play()
+/// Plays the completion ding through `NSSound`, optionally several times in a row.
+@MainActor
+final class SystemSoundPlayer: SoundPlaying {
+    private var pending: [DispatchWorkItem] = []
+
+    nonisolated func play(named name: String, times: Int) {
+        MainActor.assumeIsolated {
+            // A new alert supersedes repeats still queued from the previous one.
+            pending.forEach { $0.cancel() }
+            pending.removeAll()
+
+            // A name that no longer resolves must not silence the alert entirely.
+            guard let sound = NSSound(named: name) ?? NSSound(named: SystemSoundCatalog.fallbackName) else { return }
+            sound.play()
+
+            // Space the repeats by the sound's own length where AppKit reports it, so a long chime
+            // does not overlap itself.
+            let gap = max(0.45, sound.duration + 0.1)
+            for repetition in 1..<max(1, times) {
+                let item = DispatchWorkItem {
+                    (NSSound(named: name) ?? NSSound(named: SystemSoundCatalog.fallbackName))?.play()
+                }
+                pending.append(item)
+                DispatchQueue.main.asyncAfter(deadline: .now() + gap * Double(repetition), execute: item)
+            }
+        }
     }
 }
 

@@ -25,19 +25,24 @@ public struct MenuBarPresentation: Sendable, Equatable {
     /// neighbours. Only a deliberate signal (a threshold colour, or a title drawn on our own filled
     /// background) overrides the system's choice.
     public var adaptsToMenuBar: Bool
+    /// A user-chosen `#RRGGBB` that replaces the `foreground` token. Never set while a threshold
+    /// colour is showing: a deliberate warning must not be paintable over.
+    public var customForegroundHex: String?
 
     public init(
         text: String? = nil,
         symbolName: String? = nil,
         foreground: ColorToken,
         background: ColorToken? = nil,
-        adaptsToMenuBar: Bool = true
+        adaptsToMenuBar: Bool = true,
+        customForegroundHex: String? = nil
     ) {
         self.text = text
         self.symbolName = symbolName
         self.foreground = foreground
         self.background = background
         self.adaptsToMenuBar = adaptsToMenuBar
+        self.customForegroundHex = customForegroundHex
     }
 }
 
@@ -63,11 +68,13 @@ public enum MenuBarFormatter {
         switch settings.menuBarMode {
         case .clockIcon:
             // Clock-icon mode ignores the thresholds entirely.
+            let custom = settings.useCustomTextColor ? settings.menuBarTextColorHex : nil
             return MenuBarPresentation(
                 symbolName: state.activity == .paused ? "pause.circle" : "timer",
                 foreground: .primaryText,
                 background: background,
-                adaptsToMenuBar: background == nil
+                adaptsToMenuBar: background == nil && custom == nil,
+                customForegroundHex: custom
             )
 
         case .minutesRemaining:
@@ -76,12 +83,15 @@ public enum MenuBarFormatter {
             // A threshold colour is the whole point of the threshold, so it always wins; otherwise
             // the countdown adopts the menu bar's own colour like any other item.
             let isThreshold = token == .warning || token == .alert
+            // A chosen colour applies to the ordinary countdown only; a threshold still wins.
+            let custom = (settings.useCustomTextColor && !isThreshold) ? settings.menuBarTextColorHex : nil
             return MenuBarPresentation(
                 text: minutesText(remaining),
                 symbolName: nil,
                 foreground: token,
                 background: background,
-                adaptsToMenuBar: !isThreshold && background == nil
+                adaptsToMenuBar: !isThreshold && background == nil && custom == nil,
+                customForegroundHex: custom
             )
         }
     }
