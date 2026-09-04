@@ -161,20 +161,24 @@ final class StatusItemPresenter: NSResponder, MenuBarPresenting {
     /// appearance first, so flashes can never queue up or leave the item stuck dimmed.
     func flash(times: Int) {
         cancelFlash()
-        guard let presentation = lastApplied else { return }
+        guard lastApplied != nil else { return }
         let blinks = max(1, times)
 
+        // Each step redraws whatever the *current* presentation is, never a copy captured when the
+        // flash began. A flash fires exactly at a phase boundary, so a captured copy would repaint
+        // the phase that just ended — and since `apply` had already recorded the new one, the gate
+        // would then suppress every correction and freeze the stale title in the bar.
         for step in 0..<(blinks * 2) {
             let dimmed = step % 2 == 0
             let item = DispatchWorkItem { [weak self] in
-                self?.render(presentation, dimmed: dimmed)
+                self?.renderCurrent(dimmed: dimmed)
             }
             flashWorkItems.append(item)
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.flashInterval * Double(step), execute: item)
         }
 
         let restore = DispatchWorkItem { [weak self] in
-            self?.render(presentation, dimmed: false)
+            self?.renderCurrent(dimmed: false)
         }
         flashWorkItems.append(restore)
         DispatchQueue.main.asyncAfter(
@@ -186,9 +190,13 @@ final class StatusItemPresenter: NSResponder, MenuBarPresenting {
     func cancelFlash() {
         flashWorkItems.forEach { $0.cancel() }
         flashWorkItems.removeAll()
-        if let presentation = lastApplied {
-            render(presentation, dimmed: false)
-        }
+        renderCurrent(dimmed: false)
+    }
+
+    /// Redraws the presentation as it stands right now.
+    private func renderCurrent(dimmed: Bool) {
+        guard let presentation = lastApplied else { return }
+        render(presentation, dimmed: dimmed)
     }
 }
 
