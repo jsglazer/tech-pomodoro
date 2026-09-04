@@ -1,0 +1,47 @@
+# XcodeGen spec — source of truth for TechPomodoro.xcodeproj (macOS menu-bar app wrapper).
+# Core domain logic stays in the SwiftPM package (Package.swift) as the TechPomodoroCore
+# library module; this Xcode app target compiles only the AppKit/SwiftUI shell sources and
+# links that library, so `import TechPomodoroCore` resolves to the same module the headless
+# test suite builds against. Regenerate with:  xcodegen generate
+name: TechPomodoro
+options:
+  bundleIdPrefix: com.jsglazer
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "PWGXN26URQ"
+    SWIFT_VERSION: "6.0"
+
+packages:
+  TechPomodoroCore:
+    path: .
+
+targets:
+  TechPomodoro:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources/TechPomodoroApp
+    dependencies:
+      - package: TechPomodoroCore
+        product: TechPomodoroCore
+    settings:
+      base:
+        PRODUCT_NAME: TechPomodoro
+        PRODUCT_BUNDLE_IDENTIFIER: com.jsglazer.tech-pomodoro
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: TechPomodoro
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Josh Glazer"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_VERSION: "6.0"
+        COMBINE_HIDPI_IMAGES: YES
