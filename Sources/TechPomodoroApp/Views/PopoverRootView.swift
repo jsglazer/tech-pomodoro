@@ -15,6 +15,12 @@ struct PopoverRootView: View {
         var id: String { rawValue }
     }
 
+    /// The bundle's marketing version, or `dev` when running the SwiftPM binary outside a bundle.
+    static var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        return "v\(version ?? "dev")"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             CountdownHeader(controller: controller)
@@ -47,13 +53,20 @@ struct PopoverRootView: View {
 
             Divider().overlay(Color.tpRule)
 
-            HStack {
-                Text("tech-pomodoro")
+            ZStack {
+                // Centred on the footer rather than trailing the name, so it stays centred whatever
+                // the side labels do.
+                Text(Self.appVersion)
                     .font(.caption2)
-                Spacer()
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-                    .buttonStyle(.plain)
-                    .font(.caption2)
+
+                HStack {
+                    Text("tech-pomodoro")
+                        .font(.caption2)
+                    Spacer()
+                    Button("Quit") { NSApplication.shared.terminate(nil) }
+                        .buttonStyle(.plain)
+                        .font(.caption2)
+                }
             }
             .foregroundStyle(Color.tpDimmed)
             .padding(.horizontal, 12)
@@ -102,12 +115,22 @@ private struct CountdownHeader: View {
                 .foregroundStyle(Color.tpDimmed)
 
             HStack(spacing: 8) {
-                ControlButton(title: "Stop", enabled: state.activity != .idle) {
-                    controller.send(.stop)
+                // Left slot: Start when idle, and Stop takes that same place once running — so the
+                // button you reach for first is always on the left.
+                if state.activity == .idle {
+                    ControlButton(title: "Start", enabled: true) {
+                        controller.send(.start)
+                    }
+                } else {
+                    ControlButton(title: "Stop", enabled: true) {
+                        controller.send(.stop)
+                    }
                 }
+
+                // Right slot: always the pause control.
                 ControlButton(
-                    title: state.activity == .running ? "Pause" : (state.activity == .paused ? "Resume" : "Start"),
-                    enabled: true
+                    title: state.activity == .paused ? "Resume" : "Pause",
+                    enabled: state.activity != .idle
                 ) {
                     controller.send(.toggleRunning)
                 }
