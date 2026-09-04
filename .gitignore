@@ -11,3 +11,6 @@ DerivedData/
 # Xcode
 xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Packaged artifacts
+dist/
