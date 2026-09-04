@@ -28,8 +28,11 @@ final class StatusItemPresenter: MenuBarPresenting {
 
     private func render(_ presentation: MenuBarPresentation, dimmed: Bool = false) {
         guard let button = statusItem.button else { return }
-        let foreground = Theme.color(presentation.foreground)
-        let color = dimmed ? foreground.withAlphaComponent(0.15) : foreground
+        // When the presentation adapts, macOS owns the colour: a template image and a label-coloured
+        // title stay legible on a light menu bar and match the items either side. Only a threshold
+        // colour or our own filled background takes the colour into our hands.
+        let base = presentation.adaptsToMenuBar ? NSColor.labelColor : Theme.color(presentation.foreground)
+        let color = dimmed ? base.withAlphaComponent(0.15) : base
 
         if let text = presentation.text {
             button.image = nil
@@ -44,8 +47,14 @@ final class StatusItemPresenter: MenuBarPresenting {
         } else if let symbolName = presentation.symbolName {
             button.attributedTitle = NSAttributedString(string: "")
             let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "tech-pomodoro")
-            image?.isTemplate = false
-            button.image = image?.tinted(with: color)
+            if presentation.adaptsToMenuBar && !dimmed {
+                // A template image is what lets the glyph invert with the menu bar's appearance.
+                image?.isTemplate = true
+                button.image = image
+            } else {
+                image?.isTemplate = false
+                button.image = image?.tinted(with: color)
+            }
         }
 
         if let backgroundToken = presentation.background {

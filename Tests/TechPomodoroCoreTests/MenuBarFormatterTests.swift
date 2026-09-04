@@ -91,6 +91,35 @@ struct MenuBarFormatterTests {
         #expect(MenuBarFormatter.presentation(for: plain, at: plainNow).foreground == .primaryText)
     }
 
+    @Test("Idle and ordinary countdowns let macOS colour them, so they match the rest of the bar")
+    func neutralStatesAdapt() {
+        #expect(MenuBarFormatter.presentation(for: PomodoroState(), at: Fixture.start).adaptsToMenuBar)
+
+        let (active, now) = running(remainingMinutes: 20)
+        #expect(MenuBarFormatter.presentation(for: active, at: now).adaptsToMenuBar)
+
+        var clockMode = Fixture.settings()
+        clockMode.menuBarMode = .clockIcon
+        let (icon, iconNow) = running(remainingMinutes: 1, settings: clockMode)
+        #expect(MenuBarFormatter.presentation(for: icon, at: iconNow).adaptsToMenuBar)
+    }
+
+    @Test("A threshold colour overrides the menu bar's own colour — that is the point of it")
+    func thresholdsDoNotAdapt() {
+        for minutes in [5.0, 3.0, 1.0] {
+            let (state, now) = running(remainingMinutes: minutes)
+            #expect(MenuBarFormatter.presentation(for: state, at: now).adaptsToMenuBar == false)
+        }
+    }
+
+    @Test("A filled background takes the colour into our own hands")
+    func customBackgroundDoesNotAdapt() {
+        var settings = Fixture.settings()
+        settings.useCustomBackground = true
+        let (state, now) = running(remainingMinutes: 20, settings: settings)
+        #expect(MenuBarFormatter.presentation(for: state, at: now).adaptsToMenuBar == false)
+    }
+
     @Test("The background token appears only when a custom background is enabled")
     func backgroundIsOptIn() {
         var settings = Fixture.settings()

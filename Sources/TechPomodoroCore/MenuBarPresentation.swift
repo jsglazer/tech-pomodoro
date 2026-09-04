@@ -20,12 +20,24 @@ public struct MenuBarPresentation: Sendable, Equatable {
     public var foreground: ColorToken
     /// Non-nil only when the user enabled a filled background.
     public var background: ColorToken?
+    /// When true the shell must let macOS colour this itself — a template image, or a title in the
+    /// system label colour — so the item stays legible on a light menu bar and matches its
+    /// neighbours. Only a deliberate signal (a threshold colour, or a title drawn on our own filled
+    /// background) overrides the system's choice.
+    public var adaptsToMenuBar: Bool
 
-    public init(text: String? = nil, symbolName: String? = nil, foreground: ColorToken, background: ColorToken? = nil) {
+    public init(
+        text: String? = nil,
+        symbolName: String? = nil,
+        foreground: ColorToken,
+        background: ColorToken? = nil,
+        adaptsToMenuBar: Bool = true
+    ) {
         self.text = text
         self.symbolName = symbolName
         self.foreground = foreground
         self.background = background
+        self.adaptsToMenuBar = adaptsToMenuBar
     }
 }
 
@@ -40,7 +52,12 @@ public enum MenuBarFormatter {
         let background: ColorToken? = settings.useCustomBackground ? .background : nil
 
         guard state.activity != .idle else {
-            return MenuBarPresentation(symbolName: "timer", foreground: .dimmedText, background: background)
+            return MenuBarPresentation(
+                symbolName: "timer",
+                foreground: .dimmedText,
+                background: background,
+                adaptsToMenuBar: background == nil
+            )
         }
 
         switch settings.menuBarMode {
@@ -49,16 +66,22 @@ public enum MenuBarFormatter {
             return MenuBarPresentation(
                 symbolName: state.activity == .paused ? "pause.circle" : "timer",
                 foreground: .primaryText,
-                background: background
+                background: background,
+                adaptsToMenuBar: background == nil
             )
 
         case .minutesRemaining:
             let remaining = state.remaining(at: now)
+            let token = foregroundToken(for: state, remaining: remaining)
+            // A threshold colour is the whole point of the threshold, so it always wins; otherwise
+            // the countdown adopts the menu bar's own colour like any other item.
+            let isThreshold = token == .warning || token == .alert
             return MenuBarPresentation(
                 text: minutesText(remaining),
                 symbolName: nil,
-                foreground: foregroundToken(for: state, remaining: remaining),
-                background: background
+                foreground: token,
+                background: background,
+                adaptsToMenuBar: !isThreshold && background == nil
             )
         }
     }
