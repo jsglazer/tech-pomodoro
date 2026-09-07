@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1F52B03F4B54300342178CB1 /* PopupAlertService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60D8FFA0F648285E3203E445 /* PopupAlertService.swift */; };
 		248A7C3D5B38CF8921D20D07 /* StatusItemPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A961169B2743C9280ED7C0A9 /* StatusItemPresenter.swift */; };
 		3812ECEBD1F0EF3B1F1E8F1B /* TechPomodoroCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4A50958B477135E0CF03A5E0 /* TechPomodoroCore */; };
 		4C7EE66DAC1E6D6CE9C84DBD /* PopoverRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6119F5ADBE518A650444CD76 /* PopoverRootView.swift */; };
@@ -30,6 +31,7 @@
 		19C931490756CA6ACA333AD4 /* SettingsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTabView.swift; sourceTree = "<group>"; };
 		1A14D75459AACE4E76D726B1 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		4C049227522F4D68AAC66230 /* LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItem.swift; sourceTree = "<group>"; };
+		60D8FFA0F648285E3203E445 /* PopupAlertService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopupAlertService.swift; sourceTree = "<group>"; };
 		6119F5ADBE518A650444CD76 /* PopoverRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverRootView.swift; sourceTree = "<group>"; };
 		6CD536D319A642F68A90A198 /* IntervalsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntervalsTabView.swift; sourceTree = "<group>"; };
 		97C7F119A88710E7396C2079 /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
@@ -89,6 +91,7 @@
 				97C7F119A88710E7396C2079 /* AppController.swift */,
 				CE7850DC3A0A37254A638DF6 /* HoverPanel.swift */,
 				4C049227522F4D68AAC66230 /* LoginItem.swift */,
+				60D8FFA0F648285E3203E445 /* PopupAlertService.swift */,
 				B0A7444134F52FD87A2E276C /* SoundServices.swift */,
 				A961169B2743C9280ED7C0A9 /* StatusItemPresenter.swift */,
 				B2F88ADDB1A1A0FE3257C713 /* TechPomodoroApp.swift */,
@@ -207,6 +210,7 @@
 				959DF4861435B6DAC14653FB /* IntervalsTabView.swift in Sources */,
 				5598E4FE12DEB1C895D654AB /* LoginItem.swift in Sources */,
 				4C7EE66DAC1E6D6CE9C84DBD /* PopoverRootView.swift in Sources */,
+				1F52B03F4B54300342178CB1 /* PopupAlertService.swift in Sources */,
 				94DD93CBAD0043F62BE70BE5 /* SettingsTabView.swift in Sources */,
 				92BE971C6A2AA72DCD082FEE /* SoundServices.swift in Sources */,
 				CFC0A26359EBCAE256952F85 /* SoundTabView.swift in Sources */,
@@ -268,7 +272,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.6;
+				MARKETING_VERSION = 1.0.7;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -357,7 +361,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.6;
+				MARKETING_VERSION = 1.0.7;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

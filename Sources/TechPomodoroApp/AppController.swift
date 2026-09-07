@@ -25,8 +25,14 @@ final class AppController: ObservableObject {
     private let intervalStore: any IntervalStore
     private let settingsStore: any SettingsStoring
     private let soundPlayer: any SoundPlaying
+    private let popupPresenter: any PopupPresenting
     private let loginItem: any LoginItemControlling
     private weak var presenter: StatusItemPresenter?
+
+    /// Set for the duration of `popupPresenter.present`, whose `NSAlert.runModal()` pumps a nested
+    /// run loop that would otherwise let the `.common`-mode refresh timer re-enter `send` while this
+    /// reduction is still on the stack, corrupting the state read after `handle(effects:)` returns.
+    private var isPresentingPopup = false
 
     /// Display refresh only. It never advances the timer by itself: every reduction is handed the
     /// date from `dateProvider`, and remaining time is always derived from `phaseEndsAt`.
@@ -39,6 +45,7 @@ final class AppController: ObservableObject {
         settingsStore: any SettingsStoring,
         soundPlayer: any SoundPlaying = SystemSoundPlayer(),
         soundCatalog: SystemSoundCatalog = SystemSoundCatalog(),
+        popupPresenter: any PopupPresenting = NSAlertPopupPresenter(),
         loginItem: any LoginItemControlling = SMAppServiceLoginItem()
     ) {
         self.dateProvider = dateProvider
@@ -47,6 +54,7 @@ final class AppController: ObservableObject {
         self.settingsStore = settingsStore
         self.soundPlayer = soundPlayer
         self.soundCatalog = soundCatalog
+        self.popupPresenter = popupPresenter
         self.loginItem = loginItem
         self.displayNow = dateProvider.now()
 
@@ -95,6 +103,10 @@ final class AppController: ObservableObject {
     // MARK: - Events
 
     func send(_ event: PomodoroEvent) {
+        // The refresh timer keeps firing into the nested run loop a popup's `runModal()` pumps;
+        // nothing needs to reduce while that alert is up, and doing so would corrupt the state this
+        // very reduction is about to read back out of `handle(effects:)`.
+        guard !isPresentingPopup else { return }
         let now = dateProvider.now()
         displayNow = now
         state = PomodoroReducer.reduce(state, event, now)
@@ -166,6 +178,28 @@ final class AppController: ObservableObject {
             if state.settings.flashEnabled {
                 presenter?.flash(times: state.settings.flashRepeatCount)
             }
+            if state.settings.popupEnabled {
+                presentPopup(for: effect)
+            }
+        }
+    }
+
+    private func presentPopup(for effect: PomodoroEffect) {
+        guard case .alert(let kind) = effect else { return }
+        let (title, message) = popupText(for: kind)
+        isPresentingPopup = true
+        popupPresenter.present(title: title, message: message)
+        isPresentingPopup = false
+    }
+
+    /// `state.phase` already reflects the phase the reducer just moved *into*, so it names what's
+    /// starting rather than what just finished.
+    private func popupText(for kind: AlertKind) -> (title: String, message: String) {
+        switch kind {
+        case .intervalEnd, .cycleEnd, .sessionEnd:
+            return ("Time's up", "\(state.phase.title) is starting.")
+        case .sessionComplete:
+            return ("Session complete", "The full schedule has finished.")
         }
     }
 

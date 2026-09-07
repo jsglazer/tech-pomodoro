@@ -21,6 +21,13 @@ struct SoundTabView: View {
                 .disabled(!controller.settings.flashEnabled)
                 .opacity(controller.settings.flashEnabled ? 1 : 0.4)
 
+            Toggle("Show alert dialog", isOn: controller.bind(\.popupEnabled))
+                .toggleStyle(.switch)
+
+            Text("A dialog box appears at every boundary and must be dismissed by hand.")
+                .font(.caption2)
+                .foregroundStyle(Color.tpDimmed)
+
             Divider().overlay(Color.tpRule)
 
             Picker("Sound", selection: controller.bind(\.soundName)) {

@@ -51,6 +51,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
     public var flashEnabled: Bool
     /// How many times the menu bar icon blinks at a boundary.
     public var flashRepeatCount: Int
+    /// Shows a modal alert dialog at every phase boundary, in addition to the ding and the flash.
+    public var popupEnabled: Bool
     public var soundName: String
     public var launchAtLogin: Bool
     public var sleepBehavior: SleepBehavior
@@ -75,6 +77,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         dingRepeatCount: Int = 1,
         flashEnabled: Bool = true,
         flashRepeatCount: Int = 3,
+        popupEnabled: Bool = false,
         soundName: String = "Glass",
         launchAtLogin: Bool = false,
         sleepBehavior: SleepBehavior = .continueThroughSleep
@@ -98,6 +101,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         self.dingRepeatCount = max(1, dingRepeatCount)
         self.flashEnabled = flashEnabled
         self.flashRepeatCount = max(1, flashRepeatCount)
+        self.popupEnabled = popupEnabled
         self.soundName = soundName
         self.launchAtLogin = launchAtLogin
         self.sleepBehavior = sleepBehavior
@@ -144,6 +148,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
             dingRepeatCount: try value(.dingRepeatCount, d.dingRepeatCount),
             flashEnabled: try value(.flashEnabled, d.flashEnabled),
             flashRepeatCount: try value(.flashRepeatCount, d.flashRepeatCount),
+            popupEnabled: try value(.popupEnabled, d.popupEnabled),
             soundName: try value(.soundName, d.soundName),
             launchAtLogin: try value(.launchAtLogin, d.launchAtLogin),
             sleepBehavior: try value(.sleepBehavior, d.sleepBehavior)

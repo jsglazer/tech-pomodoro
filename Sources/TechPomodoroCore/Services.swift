@@ -28,6 +28,13 @@ public protocol MenuBarPresenting: AnyObject {
     func setTooltip(_ text: String)
 }
 
+/// Shows a modal alert dialog at a phase boundary. Main-actor isolated because every implementation
+/// drives an AppKit alert; mocked in tests to assert a presentation happened without blocking on it.
+@MainActor
+public protocol PopupPresenting: AnyObject {
+    func present(title: String, message: String)
+}
+
 /// Launch-at-login, behind a protocol because `SMAppService` only behaves inside a registered bundle.
 public protocol LoginItemControlling: Sendable {
     var isEnabled: Bool { get }
