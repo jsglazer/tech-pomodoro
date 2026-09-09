@@ -8,9 +8,9 @@ Most Pomodoro apps stop at "work, rest, long break". tech-pomodoro adds the leve
 
 ## Features
 
-- **Multi-tier schedule.** Work and rest alternate for the reps of a cycle; the cycle closes with a long break; a session of cycles closes with a session rest. Every duration and count is configurable, and the session can repeat indefinitely.
+- **Multi-tier schedule.** Work and rest alternate for the reps of a cycle; the cycle closes with a long break; a session of cycles closes with a session rest. Every duration and count is configurable — type a number directly or use the stepper — and the session can repeat indefinitely.
 - **The countdown is the control.** Click the numbers in the popover to pause or resume; Start (which becomes Stop once running) and Pause sit beneath them.
-- **Menu bar as a countdown.** Show minutes remaining or a clock icon, optionally on a filled background. During Work the minutes turn yellow at a warning threshold and red at an alert threshold — both configurable, either one disabled by setting it to 0. The rest phases get their own colour (green by default), and the ordinary countdown takes a colour of your choosing.
+- **Menu bar as a countdown.** Show minutes remaining or a clock icon, optionally on a filled background. During Work the minutes turn yellow at a warning threshold and red at an alert threshold — both configurable by typing or stepping, either one disabled by setting it to 0. The rest phases get their own colour (green by default), and the ordinary countdown takes a colour of your choosing.
 - **Alerts.** A system-sound ding and a menu bar flash at every interval, cycle, and session boundary — each independently switchable, and each repeatable up to ten times. Sounds are read from this Mac's sound folders, so the picker never offers something that will not play. An optional modal dialog can also demand a click at every boundary, for when a sound or a flash is easy to miss.
 - **Sleep-aware.** By default the timer keeps counting against the wall clock through a system sleep and fast-forwards on wake to exactly the phase the clock implies, with a single catch-up ding rather than a backlog. It can pause on sleep instead.
 - **Hover readout.** Hovering the menu bar item shows the phase and the exact time left — `Rest 03:12` — in a panel at roughly twice tooltip size, tinted to match the menu bar.
