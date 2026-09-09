@@ -28,12 +28,30 @@ struct IntervalsTabView: View {
         HStack {
             Text(label).foregroundStyle(Color.tpDimmed)
             Spacer()
-            Stepper(value: value, in: range) {
-                Text(unit.isEmpty ? "\(value.wrappedValue)" : "\(value.wrappedValue) \(unit)")
+            TextField("", text: textBinding(for: value, range: range))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 36)
+                .multilineTextAlignment(.trailing)
+                .font(.system(size: 12, design: .monospaced))
+            if !unit.isEmpty {
+                Text(unit)
                     .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(Color.tpDimmed)
             }
-            .fixedSize()
+            Stepper("", value: value, in: range)
+                .labelsHidden()
         }
         .font(.system(size: 12))
+    }
+
+    private func textBinding(for value: Binding<Int>, range: ClosedRange<Int>) -> Binding<String> {
+        Binding<String>(
+            get: { String(value.wrappedValue) },
+            set: { newValue in
+                if let parsed = Int(newValue) {
+                    value.wrappedValue = min(max(parsed, range.lowerBound), range.upperBound)
+                }
+            }
+        )
     }
 }

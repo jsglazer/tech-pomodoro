@@ -88,12 +88,28 @@ struct SettingsTabView: View {
         HStack {
             Text(label).foregroundStyle(Color.tpDimmed)
             Spacer()
-            Stepper(value: value, in: 0...60) {
-                Text("\(value.wrappedValue) min")
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(label.hasPrefix("Alert") ? Color.tpAlert : Color.tpWarning)
-            }
-            .fixedSize()
+            TextField("", text: thresholdTextBinding(for: value))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 36)
+                .multilineTextAlignment(.trailing)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(label.hasPrefix("Alert") ? Color.tpAlert : Color.tpWarning)
+            Text("min")
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(label.hasPrefix("Alert") ? Color.tpAlert : Color.tpWarning)
+            Stepper("", value: value, in: 0...60)
+                .labelsHidden()
         }
+    }
+
+    private func thresholdTextBinding(for value: Binding<Int>) -> Binding<String> {
+        Binding<String>(
+            get: { String(value.wrappedValue) },
+            set: { newValue in
+                if let parsed = Int(newValue) {
+                    value.wrappedValue = min(max(parsed, 0), 60)
+                }
+            }
+        )
     }
 }
