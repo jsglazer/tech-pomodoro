@@ -16,7 +16,18 @@ final class AppController: ObservableObject {
     @Published var loginItemWarning: String?
 
     /// Republished once a second purely so SwiftUI re-renders the countdown.
+    ///
+    /// Only while the popover is actually on screen: with it closed there is no SwiftUI view left to
+    /// re-render (`AppDelegate` tears the hosting controller down), so publishing a new date every
+    /// second would only wake observers for nothing. The menu bar reads `now` instead, which is
+    /// always current.
     @Published private(set) var displayNow: Date
+
+    /// The last date a reduction ran at. Unlike `displayNow` this is never gated, so the menu bar
+    /// countdown keeps ticking whether or not the popover is open.
+    private var now: Date
+
+    private var isPopoverVisible = false
 
     let soundCatalog: SystemSoundCatalog
 
@@ -56,7 +67,9 @@ final class AppController: ObservableObject {
         self.soundCatalog = soundCatalog
         self.popupPresenter = popupPresenter
         self.loginItem = loginItem
-        self.displayNow = dateProvider.now()
+        let start = dateProvider.now()
+        self.displayNow = start
+        self.now = start
 
         var settings = settingsStore.load()
         // A sound that no longer exists on this macOS version falls back rather than going silent.
@@ -85,9 +98,22 @@ final class AppController: ObservableObject {
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.send(.tick) }
         }
+        // A tick that lands a fraction of a second late costs nothing — the countdown is derived from
+        // `phaseEndsAt`, never accumulated — so allowing slack lets macOS coalesce this wakeup with
+        // others instead of forcing the CPU out of idle on its own schedule once a second.
+        timer.tolerance = 0.25
         // Common mode, so the countdown keeps updating while a menu or the popover is tracking.
         RunLoop.main.add(timer, forMode: .common)
         refreshTimer = timer
+    }
+
+    /// Called by `AppDelegate` as the popover opens and closes. While it is closed there is no
+    /// SwiftUI view graph to drive, so the per-second `displayNow` republish is skipped entirely.
+    func setPopoverVisible(_ visible: Bool) {
+        isPopoverVisible = visible
+        // Opening: hand SwiftUI the current time up front, so the countdown is right on the first
+        // frame rather than showing the stale date until the next tick.
+        if visible { displayNow = now }
     }
 
     func observeWorkspace() {
@@ -108,7 +134,8 @@ final class AppController: ObservableObject {
         // very reduction is about to read back out of `handle(effects:)`.
         guard !isPresentingPopup else { return }
         let now = dateProvider.now()
-        displayNow = now
+        self.now = now
+        if isPopoverVisible { displayNow = now }
         state = PomodoroReducer.reduce(state, event, now)
         handle(effects: state.pendingEffects)
         persist(records: state.pendingRecords, at: now)
@@ -229,9 +256,9 @@ final class AppController: ObservableObject {
     }
 
     private func refreshPresentation() {
-        presenter?.apply(MenuBarFormatter.presentation(for: state, at: displayNow))
-        presenter?.setTooltip(MenuBarFormatter.hoverText(for: state, at: displayNow))
-        presenter?.setHoverInfo(MenuBarFormatter.hoverInfo(for: state, at: displayNow))
+        presenter?.apply(MenuBarFormatter.presentation(for: state, at: now))
+        presenter?.setTooltip(MenuBarFormatter.hoverText(for: state, at: now))
+        presenter?.setHoverInfo(MenuBarFormatter.hoverInfo(for: state, at: now))
     }
 
     // MARK: - Export
