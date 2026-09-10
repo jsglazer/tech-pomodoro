@@ -38,7 +38,9 @@ Then copy the built `TechPomodoro.app` into `/Applications`. Launch at login onl
 The timer engine is a pure Swift state machine with no AppKit or SwiftUI anywhere in it:
 
 - `Sources/TechPomodoroCore` — the reducer, the analytics aggregator, the menu bar formatting model, and the stores. No UI imports, no reads of the system clock, no hardcoded paths. Every instant arrives as a parameter and every dependency is injected.
-- `Sources/TechPomodoroApp` — the OS shell: the status item, the SwiftUI popover, `NSSound`, `SMAppService`, and the `NSWorkspace` sleep/wake observers. One 1-second runloop timer drives display refresh only; it never advances the timer, which is always derived from an absolute end timestamp against the injected clock.
+- `Sources/TechPomodoroApp` — the OS shell: the status item, the SwiftUI popover, `NSSound`, `SMAppService`, and the `NSWorkspace` sleep/wake observers. One 1-second runloop timer drives display refresh only; it never advances the timer, which is always derived from an absolute end timestamp against the injected clock. Because remaining time is derived rather than accumulated, that timer carries a 0.25s tolerance so macOS can coalesce its wakeup instead of forcing the CPU out of idle every second.
+
+The popover and its `NSHostingController` are built on each open and torn down in `popoverDidClose` — deliberately, not incidentally. A retained hosting controller keeps its SwiftUI view graph and the popover's window alive after the popover is dismissed, and AppKit's display cycle will go on laying out that invisible view indefinitely; on 1.0.8 that cost 47–59% CPU with nothing on screen. Keep the rule: no SwiftUI view graph should outlive the popover that shows it.
 
 That split is what makes the interesting parts testable: `swift test` covers the multi-tier transitions, sleep/wake fast-forward, pause/resume/stop edge cases, threshold colours, rolling analytics windows, pruning, and the persistence and export roundtrips.
 
