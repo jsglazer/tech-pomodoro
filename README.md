@@ -9,8 +9,8 @@ Most Pomodoro apps stop at "work, rest, long break". tech-pomodoro adds the leve
 ## Features
 
 - **Multi-tier schedule.** Work and rest alternate for the reps of a cycle; the cycle closes with a long break; a session of cycles closes with a session rest. Every duration and count is configurable — type a number directly or use the stepper — and the session can repeat indefinitely.
-- **The countdown is the control.** Click the numbers in the popover to pause or resume; Start (which becomes Stop once running) and Pause sit beneath them.
-- **Menu bar as a countdown.** Show minutes remaining or a clock icon, optionally on a filled background. During Work the minutes turn yellow at a warning threshold and red at an alert threshold — both configurable by typing or stepping, either one disabled by setting it to 0. The rest phases get their own colour (green by default), and the ordinary countdown takes a colour of your choosing.
+- **The countdown is the control.** Click the numbers in the popover to pause or resume; Start (which becomes Stop once running), Pause and Skip sit beneath them. Skip ends the current phase at once and starts the next one running, even from a pause; the reps and cycles advance as if the phase had finished, a skipped Work interval is logged as the time actually worked, and no alert fires.
+- **Menu bar as a countdown.** Show minutes remaining or a clock icon, optionally on a filled background. During Work the minutes turn yellow at a warning threshold and red at an alert threshold — both configurable by typing or stepping, either one disabled by setting it to 0. The rest phases get their own colour (green by default), and the ordinary countdown takes a colour of your choosing. When the timer is idle, the clock icon shows in cyan so the app stays easy to spot.
 - **Alerts.** A system-sound ding and a menu bar flash at every interval, cycle, and session boundary — each independently switchable, and each repeatable up to ten times. Sounds are read from this Mac's sound folders, so the picker never offers something that will not play. An optional modal dialog can also demand a click at every boundary, for when a sound or a flash is easy to miss.
 - **Sleep-aware.** By default the timer keeps counting against the wall clock through a system sleep and fast-forwards on wake to exactly the phase the clock implies, with a single catch-up ding rather than a backlog. It can pause on sleep instead.
 - **Hover readout.** Hovering the menu bar item shows the phase and the exact time left — `Rest 03:12` — in a panel at roughly twice tooltip size, tinted to match the menu bar.
@@ -42,7 +42,7 @@ The timer engine is a pure Swift state machine with no AppKit or SwiftUI anywher
 
 The popover and its `NSHostingController` are built on each open and torn down in `popoverDidClose` — deliberately, not incidentally. A retained hosting controller keeps its SwiftUI view graph and the popover's window alive after the popover is dismissed, and AppKit's display cycle will go on laying out that invisible view indefinitely; on 1.0.8 that cost 47–59% CPU with nothing on screen. Keep the rule: no SwiftUI view graph should outlive the popover that shows it.
 
-That split is what makes the interesting parts testable: `swift test` covers the multi-tier transitions, sleep/wake fast-forward, pause/resume/stop edge cases, threshold colours, rolling analytics windows, pruning, and the persistence and export roundtrips.
+That split is what makes the interesting parts testable: `swift test` covers the multi-tier transitions, sleep/wake fast-forward, pause/resume/stop/skip edge cases, threshold colours, rolling analytics windows, pruning, and the persistence and export roundtrips.
 
 ```sh
 swift test
