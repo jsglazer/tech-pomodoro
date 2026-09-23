@@ -1,19 +1,21 @@
-# XcodeGen spec — source of truth for TechPomodoro.xcodeproj (macOS menu-bar app wrapper).
-# Core domain logic stays in the SwiftPM package (Package.swift) as the TechPomodoroCore
-# library module; this Xcode app target compiles only the AppKit/SwiftUI shell sources and
-# links that library, so `import TechPomodoroCore` resolves to the same module the headless
-# test suite builds against. Regenerate with:  xcodegen generate
+# XcodeGen spec — source of truth for TechPomodoro.xcodeproj: the macOS menu-bar app, the iOS app,
+# and the iOS app's Live Activity extension. Core domain logic stays in the SwiftPM package
+# (Package.swift) as the TechPomodoroCore library module; both app targets compile only their own
+# shell sources and link that library, so `import TechPomodoroCore` resolves to the same module the
+# headless test suite builds against. MARKETING_VERSION is shared, so macOS and iOS version together.
+# Regenerate with:  xcodegen generate
 name: TechPomodoro
 options:
   bundleIdPrefix: com.jsglazer
   deploymentTarget:
     macOS: "14.0"
+    iOS: "17.0"
   createIntermediateGroups: true
   groupSortPosition: top
 
 settings:
   base:
-    MARKETING_VERSION: "1.0.10"
+    MARKETING_VERSION: "1.0.11"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: "PWGXN26URQ"
     SWIFT_VERSION: "6.0"
@@ -46,3 +48,66 @@ targets:
         SWIFT_VERSION: "6.0"
         COMBINE_HIDPI_IMAGES: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  TechPomodoroiOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources/TechPomodoroiOS
+      - path: Sources/TechPomodoroShared
+    dependencies:
+      - package: TechPomodoroCore
+        product: TechPomodoroCore
+      - target: TechPomodoroLiveActivity
+        embed: true
+    entitlements:
+      path: Sources/TechPomodoroiOS/TechPomodoroiOS.entitlements
+      properties:
+        # Boundary alerts break through Focus, as a timer's should.
+        com.apple.developer.usernotifications.time-sensitive: true
+    settings:
+      base:
+        PRODUCT_NAME: TechPomodoro
+        PRODUCT_BUNDLE_IDENTIFIER: com.jsglazer.tech-pomodoro.ios
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Pomodoro
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Josh Glazer"
+        INFOPLIST_KEY_NSSupportsLiveActivities: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "6.0"
+
+  TechPomodoroLiveActivity:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources/TechPomodoroLiveActivity
+      - path: Sources/TechPomodoroShared
+      # The palette only; the token mapping (Theme+Tokens.swift) needs the core and stays in the app.
+      - path: Sources/TechPomodoroiOS/Theme.swift
+    info:
+      path: Sources/TechPomodoroLiveActivity/Info.plist
+      properties:
+        CFBundleDisplayName: Pomodoro
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_NAME: TechPomodoroLiveActivity
+        PRODUCT_BUNDLE_IDENTIFIER: com.jsglazer.tech-pomodoro.ios.LiveActivity
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+        SWIFT_VERSION: "6.0"

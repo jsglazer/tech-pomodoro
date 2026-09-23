@@ -1,6 +1,9 @@
 // makeicon.swift — render tech-pomodoro's 1024×1024 base icon to a PNG.
 //
-//   swift Scripts/makeicon.swift [out.png]
+//   swift Scripts/makeicon.swift [--ios] [out.png]
+//
+// `--ios` draws the tile full-bleed and square: iOS masks the corners itself and rejects an icon with
+// transparency, so the macOS inset and rounding are dropped.
 //
 // Draws into an offscreen bitmap (no window server required): a dark blue rounded-rect tile with a
 // cyan outlined clock — the same cyan the menu bar and popover use. Scaled into the app icon set by
@@ -8,7 +11,9 @@
 import AppKit
 import Foundation
 
-let outPath = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "icon_1024.png"
+let arguments = CommandLine.arguments.dropFirst()
+let fullBleed = arguments.contains("--ios")
+let outPath = arguments.first { !$0.hasPrefix("--") } ?? "icon_1024.png"
 let pixels = 1024
 let S = CGFloat(pixels)
 
@@ -33,9 +38,9 @@ NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
 let ctx = NSGraphicsContext.current!
 
 // Rounded-rect tile with a macOS-like inset + corner radius.
-let inset = S * 0.085
+let inset = fullBleed ? 0 : S * 0.085
 let rect = NSRect(x: inset, y: inset, width: S - 2 * inset, height: S - 2 * inset)
-let radius = rect.width * 0.2237
+let radius = fullBleed ? 0 : rect.width * 0.2237
 let tile = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
 
 ctx.saveGraphicsState()
@@ -44,7 +49,8 @@ NSGradient(starting: deepBlue, ending: darkerBlue)!.draw(in: rect, angle: -90)
 ctx.restoreGraphicsState()
 
 let center = NSPoint(x: S / 2, y: S / 2)
-let dialRadius = rect.width * 0.325
+// Sized from the macOS tile either way, so the glyph matches across platforms.
+let dialRadius = S * (1 - 2 * 0.085) * 0.325
 let stroke = S * 0.035
 
 // The dial: a cyan ring, left as an outline rather than a filled face so the icon reads at 16pt.
@@ -96,7 +102,21 @@ NSBezierPath(ovalIn: NSRect(
 
 NSGraphicsContext.restoreGraphicsState()
 
-guard let png = rep.representation(using: .png, properties: [:]) else {
+/// The iOS icon, flattened onto an opaque RGB bitmap: App Store Connect rejects an icon that carries
+/// an alpha channel even when every pixel is opaque.
+func opaque(_ rep: NSBitmapImageRep) -> NSBitmapImageRep? {
+    guard let image = rep.cgImage,
+          let context = CGContext(
+              data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
+              space: CGColorSpace(name: CGColorSpace.sRGB)!,
+              bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+          ) else { return nil }
+    context.draw(image, in: CGRect(x: 0, y: 0, width: pixels, height: pixels))
+    return context.makeImage().map(NSBitmapImageRep.init(cgImage:))
+}
+
+guard let output = fullBleed ? opaque(rep) : rep,
+      let png = output.representation(using: .png, properties: [:]) else {
     FileHandle.standardError.write(Data("PNG encode failed\n".utf8)); exit(1)
 }
 do {
