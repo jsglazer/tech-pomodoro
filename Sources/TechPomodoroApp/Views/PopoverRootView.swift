@@ -1,7 +1,7 @@
 import SwiftUI
 import TechPomodoroCore
 
-/// The popover: a live countdown header with its own Stop and Pause controls, over three tabs.
+/// The popover: a live countdown header with its own Stop, Pause and Skip controls, over three tabs.
 struct PopoverRootView: View {
     @ObservedObject var controller: AppController
     @State private var tab: Tab = .timer
@@ -127,13 +127,19 @@ private struct CountdownHeader: View {
                     }
                 }
 
-                // Right slot: always the pause control.
+                // Middle slot: always the pause control.
                 ControlButton(
                     title: state.activity == .paused ? "Resume" : "Pause",
                     enabled: state.activity != .idle
                 ) {
                     controller.send(.toggleRunning)
                 }
+
+                // Far right: jump straight to the next phase.
+                ControlButton(title: "Skip", enabled: state.activity != .idle) {
+                    controller.send(.skip)
+                }
+                .help("End this phase now and start the next one")
             }
         }
         .padding(.top, 14)

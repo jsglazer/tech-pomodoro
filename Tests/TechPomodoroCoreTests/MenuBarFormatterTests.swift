@@ -16,13 +16,15 @@ struct MenuBarFormatterTests {
         return (state, Fixture.start)
     }
 
-    @Test("Idle shows the dimmed clock symbol, never a countdown")
+    @Test("Idle shows the clock symbol in the theme cyan, never a countdown")
     func idlePresentation() {
         let presentation = MenuBarFormatter.presentation(for: PomodoroState(), at: Fixture.start)
 
         #expect(presentation.text == nil)
         #expect(presentation.symbolName == "timer")
-        #expect(presentation.foreground == .dimmedText)
+        #expect(presentation.foreground == .primaryText)
+        #expect(presentation.adaptsToMenuBar == false)
+        #expect(presentation.customForegroundHex == nil)
     }
 
     @Test("Minutes round up, so the final minute reads 1 and only the last second reads 0")
@@ -91,10 +93,8 @@ struct MenuBarFormatterTests {
         #expect(MenuBarFormatter.presentation(for: plain, at: plainNow).foreground == .primaryText)
     }
 
-    @Test("Idle and ordinary countdowns let macOS colour them, so they match the rest of the bar")
+    @Test("Ordinary countdowns let macOS colour them, so they match the rest of the bar")
     func neutralStatesAdapt() {
-        #expect(MenuBarFormatter.presentation(for: PomodoroState(), at: Fixture.start).adaptsToMenuBar)
-
         let (active, now) = running(remainingMinutes: 20)
         #expect(MenuBarFormatter.presentation(for: active, at: now).adaptsToMenuBar)
 

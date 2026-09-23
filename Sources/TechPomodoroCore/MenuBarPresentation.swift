@@ -67,12 +67,14 @@ public enum MenuBarFormatter {
         let settings = state.settings
         let background: ColorToken? = settings.useCustomBackground ? .background : nil
 
+        // Idle draws the clock in the theme cyan rather than the menu bar's own colour, so the app
+        // stays recognisable at a glance even when nothing is running.
         guard state.activity != .idle else {
             return MenuBarPresentation(
                 symbolName: "timer",
-                foreground: .dimmedText,
+                foreground: .primaryText,
                 background: background,
-                adaptsToMenuBar: background == nil
+                adaptsToMenuBar: false
             )
         }
 

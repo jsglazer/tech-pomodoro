@@ -38,6 +38,9 @@ public enum PomodoroReducer {
         case .stop:
             stop(&s, at: now)
 
+        case .skip:
+            skip(&s, at: now)
+
         case .tick:
             advance(&s, to: now)
 
@@ -103,15 +106,43 @@ public enum PomodoroReducer {
         guard s.activity != .idle else { return }
         // A work interval cut short is still time worked: it is logged as a partial record. Stopping
         // during a rest or a break records nothing.
-        if s.phase == .work, let started = s.phaseStartedAt {
-            let elapsed = Int(s.elapsedInPhase(at: now).rounded())
-            if elapsed > 0 {
-                s.pendingRecords.append(
-                    IntervalRecord(kind: .work, startedAt: started, elapsedSeconds: elapsed, completed: false)
-                )
-            }
+        if s.phase == .work, let partial = partialWorkRecord(s, at: now) {
+            s.pendingRecords.append(partial)
         }
         goIdle(&s)
+    }
+
+    /// Cuts the current phase short and begins the next one at `now`, running even if the skipped
+    /// phase was paused. The counters advance exactly as if the phase had ended on its own, but a
+    /// skipped work interval is logged as the partial time actually worked, never as a full one, and
+    /// no alert fires — the user asked for the change, so there is nothing to announce.
+    private static func skip(_ s: inout PomodoroState, at now: Date) {
+        guard s.activity != .idle else { return }
+        let skippedPhase = s.phase
+        let partial = skippedPhase == .work ? partialWorkRecord(s, at: now) : nil
+
+        // Paused, the end instant is gone; running, it is in the future. Either way the phase ends now.
+        s.phaseEndsAt = now
+        s.remainingWhenPaused = nil
+        s.activity = .running
+
+        var records: [IntervalRecord] = []
+        var discardedAlert: AlertKind?
+        completePhase(&s, endingAt: now, records: &records, alert: &discardedAlert)
+
+        if skippedPhase == .work {
+            records.removeAll { $0.kind == .work }
+            if let partial { records.insert(partial, at: 0) }
+        }
+        s.pendingRecords = records
+    }
+
+    /// The work done so far in the current phase, or nil when none has elapsed.
+    private static func partialWorkRecord(_ s: PomodoroState, at now: Date) -> IntervalRecord? {
+        guard let started = s.phaseStartedAt else { return nil }
+        let elapsed = Int(s.elapsedInPhase(at: now).rounded())
+        guard elapsed > 0 else { return nil }
+        return IntervalRecord(kind: .work, startedAt: started, elapsedSeconds: elapsed, completed: false)
     }
 
     private static func goIdle(_ s: inout PomodoroState) {

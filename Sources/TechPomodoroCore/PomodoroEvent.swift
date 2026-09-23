@@ -9,6 +9,8 @@ public enum PomodoroEvent: Sendable, Equatable {
     /// Clicking the countdown numbers: start when idle, pause when running, resume when paused.
     case toggleRunning
     case stop
+    /// Ends the current phase now and moves straight on to the next one, running.
+    case skip
     /// A refresh tick. Carries no time of its own — the reducer is handed `now` separately.
     case tick
     /// macOS is about to sleep.
