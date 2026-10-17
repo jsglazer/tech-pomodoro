@@ -24,7 +24,11 @@ struct SoundTabView: View {
             Toggle("Show alert dialog", isOn: controller.bind(\.popupEnabled))
                 .toggleStyle(.switch)
 
-            Text("A dialog box appears at every boundary and must be dismissed by hand.")
+            dismissStepper
+                .disabled(!controller.settings.popupEnabled)
+                .opacity(controller.settings.popupEnabled ? 1 : 0.4)
+
+            Text("A dialog box appears at every boundary and closes itself after the time set here, or stays until dismissed by hand when set to never.")
                 .font(.caption2)
                 .foregroundStyle(Color.tpDimmed)
 
@@ -44,6 +48,20 @@ struct SoundTabView: View {
                 .foregroundStyle(Color.tpDimmed)
         }
         .font(.system(size: 12))
+    }
+
+    /// 0 is "never"; otherwise 5-second steps up to two minutes.
+    private var dismissStepper: some View {
+        let value = controller.bind(\.popupDismissSeconds)
+        return HStack {
+            Text("Close dialog after").foregroundStyle(Color.tpDimmed)
+            Spacer()
+            Stepper(value: value, in: 0...120, step: 5) {
+                Text(value.wrappedValue == 0 ? "never" : "\(value.wrappedValue)s")
+                    .font(.system(size: 12, design: .monospaced))
+            }
+            .fixedSize()
+        }
     }
 
     private func repeatStepper(_ label: String, _ value: Binding<Int>) -> some View {

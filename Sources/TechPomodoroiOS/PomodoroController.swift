@@ -22,7 +22,9 @@ final class PomodoroController: ObservableObject {
     @Published private(set) var analytics: AnalyticsSummary = .empty
     @Published private(set) var history: [IntervalRecord] = []
     /// The in-app stand-in for the Mac's alert dialog, shown only while the app is open.
-    @Published var popup: PopupMessage?
+    @Published var popup: PopupMessage? {
+        didSet { schedulePopupDismissal() }
+    }
     @Published private(set) var notificationAuthorization: NotificationScheduler.Authorization = .notDetermined
 
     let soundCatalog: BundledSoundCatalog
@@ -37,6 +39,8 @@ final class PomodoroController: ObservableObject {
     private let liveActivity = LiveActivityController()
     private let haptics = UINotificationFeedbackGenerator()
     private var pendingHaptics: [DispatchWorkItem] = []
+    /// Closes the in-app alert once its time limit passes, unless a click got there first.
+    private var popupDismissal: DispatchWorkItem?
 
     /// Foreground only. It crosses boundaries on time while the app is open; with the app in the
     /// background the notifications and the Live Activity take over and this is stopped.
@@ -246,6 +250,22 @@ final class PomodoroController: ObservableObject {
                 popup = PopupMessage(kind: kind, startingPhase: state.phase)
             }
         }
+    }
+
+    /// Every new alert restarts the clock; clearing the alert cancels it. The work item checks the
+    /// alert's identity, so a timer left over from an earlier alert can never close a newer one.
+    private func schedulePopupDismissal() {
+        popupDismissal?.cancel()
+        popupDismissal = nil
+        guard let current = popup, settings.popupDismissSeconds > 0 else { return }
+        let item = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.popup?.id == current.id else { return }
+                self.popup = nil
+            }
+        }
+        popupDismissal = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + TimeInterval(settings.popupDismissSeconds), execute: item)
     }
 
     private func pulse(times: Int) {

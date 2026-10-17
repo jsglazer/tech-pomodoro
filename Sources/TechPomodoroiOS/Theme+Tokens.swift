@@ -20,8 +20,9 @@ extension Theme {
         Color(uiColor: color(token))
     }
 
-    /// The countdown's colour, from the same presentation the Mac menu bar draws: a threshold colour
-    /// during late Work, the rest colour during rest phases, a chosen custom colour, else cyan.
+    /// The countdown's colour, from the same presentation the Mac menu bar draws: red while paused, a
+    /// threshold colour late in any phase, the rest colour during rest phases, a chosen custom
+    /// colour, else cyan.
     static func countdownColor(for state: PomodoroState, at now: Date) -> Color {
         Color(uiColor: countdownUIColor(for: state, at: now))
     }
@@ -31,7 +32,6 @@ extension Theme {
     }
 
     private static func countdownUIColor(for state: PomodoroState, at now: Date) -> UIColor {
-        guard state.activity != .paused else { return warning }
         // The iOS countdown always reads as minutes-remaining, whatever the Mac menu bar mode is, so
         // the thresholds apply here even when the synced setting says clock icon.
         var settings = state.settings

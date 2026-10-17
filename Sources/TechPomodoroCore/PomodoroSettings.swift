@@ -53,6 +53,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
     public var flashRepeatCount: Int
     /// Shows a modal alert dialog at every phase boundary, in addition to the ding and the flash.
     public var popupEnabled: Bool
+    /// Seconds before an unanswered alert dialog dismisses itself. `0` leaves it up until clicked.
+    public var popupDismissSeconds: Int
     public var soundName: String
     public var launchAtLogin: Bool
     public var sleepBehavior: SleepBehavior
@@ -78,6 +80,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         flashEnabled: Bool = true,
         flashRepeatCount: Int = 3,
         popupEnabled: Bool = false,
+        popupDismissSeconds: Int = 15,
         soundName: String = "Glass",
         launchAtLogin: Bool = false,
         sleepBehavior: SleepBehavior = .continueThroughSleep
@@ -102,6 +105,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         self.flashEnabled = flashEnabled
         self.flashRepeatCount = max(1, flashRepeatCount)
         self.popupEnabled = popupEnabled
+        self.popupDismissSeconds = max(0, popupDismissSeconds)
         self.soundName = soundName
         self.launchAtLogin = launchAtLogin
         self.sleepBehavior = sleepBehavior
@@ -149,6 +153,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
             flashEnabled: try value(.flashEnabled, d.flashEnabled),
             flashRepeatCount: try value(.flashRepeatCount, d.flashRepeatCount),
             popupEnabled: try value(.popupEnabled, d.popupEnabled),
+            popupDismissSeconds: try value(.popupDismissSeconds, d.popupDismissSeconds),
             soundName: try value(.soundName, d.soundName),
             launchAtLogin: try value(.launchAtLogin, d.launchAtLogin),
             sleepBehavior: try value(.sleepBehavior, d.sleepBehavior)

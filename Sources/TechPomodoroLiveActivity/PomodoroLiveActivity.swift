@@ -32,7 +32,7 @@ struct PomodoroLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.trailing) {
                     CountdownText(state: state)
                         .font(.title2.monospacedDigit())
-                        .foregroundStyle(state.isPaused ? Color.tpWarning : tint)
+                        .foregroundStyle(state.isPaused ? Color.tpAlert : tint)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 8) {
@@ -53,7 +53,7 @@ struct PomodoroLiveActivity: Widget {
                 CountdownText(state: state)
                     .monospacedDigit()
                     .frame(maxWidth: 52)
-                    .foregroundStyle(state.isPaused ? Color.tpWarning : tint)
+                    .foregroundStyle(state.isPaused ? Color.tpAlert : tint)
             } minimal: {
                 Image(systemName: state.isPaused ? "pause.circle" : "timer")
                     .foregroundStyle(tint)
@@ -82,7 +82,7 @@ private struct LockScreenView: View {
                 Spacer()
                 CountdownText(state: state)
                     .font(.system(size: 40, weight: .medium, design: .monospaced))
-                    .foregroundStyle(state.isPaused ? Color.tpWarning : tint)
+                    .foregroundStyle(state.isPaused ? Color.tpAlert : tint)
                     .multilineTextAlignment(.trailing)
             }
 

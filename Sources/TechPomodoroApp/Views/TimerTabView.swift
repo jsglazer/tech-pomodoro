@@ -70,7 +70,7 @@ struct AnalyticsPanel: View {
     private func window(_ title: String, _ value: AnalyticsWindow) -> some View {
         LabeledRow(
             label: title,
-            value: "\(value.sessions) sess · \(value.cycles) cyc · \(value.workDurationText)"
+            value: value.summaryText
         )
     }
 }

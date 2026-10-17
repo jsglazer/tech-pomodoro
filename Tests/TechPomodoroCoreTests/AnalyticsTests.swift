@@ -64,6 +64,21 @@ struct AnalyticsTests {
         #expect(summary.today.cycles == 2)
     }
 
+    @Test("Reps count completed work intervals only; a partial one adds its time but no rep")
+    func repsCountCompletedWork() {
+        let records = [
+            work(Fixture.start, minutes: 25),
+            work(Fixture.start.plus(minutes: 30), minutes: 25),
+            work(Fixture.start.plus(minutes: 60), minutes: 10, completed: false),
+            cycle(Fixture.start.plus(minutes: 55))
+        ]
+        let summary = AnalyticsAggregator.summarize(records: records, now: Fixture.start.plus(minutes: 120), calendar: Fixture.calendar)
+
+        #expect(summary.today.reps == 2)
+        #expect(summary.today.workSeconds == 60 * 60)
+        #expect(summary.today.summaryText == "0 sess · 1 cyc · 2 reps · 1h 0m")
+    }
+
     @Test("Sessions that reached their Session Rest are counted per window")
     func sessionsCounted() {
         let day = 24.0 * 60

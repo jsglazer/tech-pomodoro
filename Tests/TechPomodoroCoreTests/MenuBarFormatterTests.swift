@@ -61,11 +61,61 @@ struct MenuBarFormatterTests {
         #expect(MenuBarFormatter.presentation(for: state, at: later).foreground == .alert)
     }
 
-    @Test("Rest and breaks never take a threshold colour")
-    func thresholdsAreWorkOnly() {
+    @Test("Rest and breaks take the same threshold colours as Work")
+    func thresholdsApplyToRestPhases() {
         for phase in [Phase.rest, .longBreak, .sessionRest] {
-            let (state, now) = running(remainingMinutes: 1, phase: phase)
-            #expect(MenuBarFormatter.presentation(for: state, at: now).foreground == .primaryText)
+            let (warned, warnedNow) = running(remainingMinutes: 4, phase: phase)
+            let warning = MenuBarFormatter.presentation(for: warned, at: warnedNow)
+            #expect(warning.foreground == .warning)
+            #expect(warning.customForegroundHex == nil)
+
+            let (alerted, alertedNow) = running(remainingMinutes: 1, phase: phase)
+            let alert = MenuBarFormatter.presentation(for: alerted, at: alertedNow)
+            #expect(alert.foreground == .alert)
+            #expect(alert.customForegroundHex == nil)
+            #expect(alert.adaptsToMenuBar == false)
+        }
+    }
+
+    @Test("Above the thresholds a rest phase keeps the rest colour")
+    func restAboveThresholdsKeepsRestColour() {
+        let (state, now) = running(remainingMinutes: 10, phase: .longBreak)
+        let presentation = MenuBarFormatter.presentation(for: state, at: now)
+        #expect(presentation.foreground == .primaryText)
+        #expect(presentation.customForegroundHex == "#22C55E")
+    }
+
+    @Test("The countdown carries W during Work and R during every rest phase")
+    func phaseLetterFollowsCountdown() {
+        let (work, workNow) = running(remainingMinutes: 24)
+        #expect(MenuBarFormatter.presentation(for: work, at: workNow).text == "24W")
+
+        for phase in [Phase.rest, .longBreak, .sessionRest] {
+            let (state, now) = running(remainingMinutes: 4, phase: phase)
+            #expect(MenuBarFormatter.presentation(for: state, at: now).text == "4R")
+        }
+    }
+
+    @Test("Paused is red in both modes, overriding thresholds and chosen colours")
+    func pausedIsRed() {
+        var settings = Fixture.settings()
+        settings.useCustomTextColor = true
+        settings.menuBarTextColorHex = "#FF8800"
+
+        for mode in MenuBarMode.allCases {
+            settings.menuBarMode = mode
+            for phase in [Phase.work, .rest] {
+                let (running, now) = running(remainingMinutes: 20, phase: phase, settings: settings)
+                let paused = PomodoroReducer.reduce(running, .pause, now)
+                let presentation = MenuBarFormatter.presentation(for: paused, at: now)
+
+                #expect(presentation.foreground == .alert)
+                #expect(presentation.customForegroundHex == nil)
+                #expect(presentation.adaptsToMenuBar == false)
+                #expect(presentation.text == (mode == .clockIcon
+                    ? MenuBarFormatter.phaseLetter(phase)
+                    : "20" + MenuBarFormatter.phaseLetter(phase)))
+            }
         }
     }
 
@@ -76,7 +126,7 @@ struct MenuBarFormatterTests {
         let (state, now) = running(remainingMinutes: 1, settings: settings)
         let presentation = MenuBarFormatter.presentation(for: state, at: now)
 
-        #expect(presentation.text == nil)
+        #expect(presentation.text == "W")
         #expect(presentation.symbolName == "timer")
         #expect(presentation.foreground == .primaryText)
     }
@@ -215,7 +265,7 @@ struct MenuBarFormatterTests {
         settings.restColorHex = "#22C55E"
 
         for phase in [Phase.rest, .longBreak, .sessionRest] {
-            let (state, now) = running(remainingMinutes: 4, phase: phase, settings: settings)
+            let (state, now) = running(remainingMinutes: 8, phase: phase, settings: settings)
             #expect(MenuBarFormatter.presentation(for: state, at: now).customForegroundHex == "#22C55E")
         }
 
@@ -228,7 +278,7 @@ struct MenuBarFormatterTests {
         var settings = Fixture.settings()
         settings.useRestColor = false
 
-        let (state, now) = running(remainingMinutes: 4, phase: .rest, settings: settings)
+        let (state, now) = running(remainingMinutes: 8, phase: .rest, settings: settings)
         let presentation = MenuBarFormatter.presentation(for: state, at: now)
 
         #expect(presentation.customForegroundHex == nil)
@@ -242,7 +292,7 @@ struct MenuBarFormatterTests {
         settings.menuBarTextColorHex = "#FF8800"
         settings.restColorHex = "#22C55E"
 
-        let (rest, restNow) = running(remainingMinutes: 4, phase: .rest, settings: settings)
+        let (rest, restNow) = running(remainingMinutes: 8, phase: .rest, settings: settings)
         #expect(MenuBarFormatter.presentation(for: rest, at: restNow).customForegroundHex == "#22C55E")
 
         let (work, workNow) = running(remainingMinutes: 20, settings: settings)

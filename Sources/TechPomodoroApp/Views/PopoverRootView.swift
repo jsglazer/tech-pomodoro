@@ -82,6 +82,7 @@ struct PopoverRootView: View {
 /// The countdown itself is the pause control: clicking the numbers toggles running and paused.
 private struct CountdownHeader: View {
     @ObservedObject var controller: AppController
+    @State private var confirmingStop = false
 
     private var state: PomodoroState { controller.state }
 
@@ -102,7 +103,7 @@ private struct CountdownHeader: View {
             } label: {
                 Text(state.activity == .idle ? "--:--" : remainingText)
                     .font(.system(size: 44, weight: .medium, design: .monospaced))
-                    .foregroundStyle(state.activity == .paused ? Color.tpWarning : Color.tpPrimary)
+                    .foregroundStyle(state.activity == .paused ? Color.tpAlert : Color.tpPrimary)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -122,8 +123,9 @@ private struct CountdownHeader: View {
                         controller.send(.start)
                     }
                 } else {
+                    // Stop throws away the place in the schedule, so it asks first.
                     ControlButton(title: "Stop", enabled: true) {
-                        controller.send(.stop)
+                        confirmingStop = true
                     }
                 }
 
@@ -144,6 +146,12 @@ private struct CountdownHeader: View {
         }
         .padding(.top, 14)
         .padding(.horizontal, 12)
+        .alert("Stop the timer?", isPresented: $confirmingStop) {
+            Button("Stop", role: .destructive) { controller.send(.stop) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The schedule resets to Rep 1 of Cycle 1. Work done so far is still logged.")
+        }
     }
 }
 

@@ -96,6 +96,7 @@ struct PersistenceTests {
         #expect(decoded.workMinutes == 42)
         #expect(decoded.restMinutes == PomodoroSettings().restMinutes)
         #expect(decoded.sleepBehavior == .continueThroughSleep)
+        #expect(decoded.popupDismissSeconds == 15)
     }
 
     @Test("The repeat counts and the custom colour survive a settings roundtrip")

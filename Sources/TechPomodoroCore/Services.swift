@@ -32,7 +32,9 @@ public protocol MenuBarPresenting: AnyObject {
 /// drives an AppKit alert; mocked in tests to assert a presentation happened without blocking on it.
 @MainActor
 public protocol PopupPresenting: AnyObject {
-    func present(title: String, message: String)
+    /// Shows the alert. A positive `dismissAfter` closes it unanswered once that many seconds pass;
+    /// nil or zero leaves it up until clicked.
+    func present(title: String, message: String, dismissAfter: TimeInterval?)
 }
 
 /// Launch-at-login, behind a protocol because `SMAppService` only behaves inside a registered bundle.

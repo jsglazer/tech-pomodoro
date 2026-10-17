@@ -215,7 +215,8 @@ final class AppController: ObservableObject {
         guard case .alert(let kind) = effect else { return }
         let (title, message) = popupText(for: kind)
         isPresentingPopup = true
-        popupPresenter.present(title: title, message: message)
+        let limit = state.settings.popupDismissSeconds
+        popupPresenter.present(title: title, message: message, dismissAfter: limit > 0 ? TimeInterval(limit) : nil)
         isPresentingPopup = false
     }
 

@@ -38,6 +38,7 @@ struct TimerScreen: View {
 
 private struct TimerPanel: View {
     @ObservedObject var controller: PomodoroController
+    @State private var confirmingStop = false
 
     private var state: PomodoroState { controller.state }
 
@@ -68,8 +69,9 @@ private struct TimerPanel: View {
                         controller.send(.start)
                     }
                 } else {
+                    // Stop throws away the place in the schedule, so it asks first, as on the Mac.
                     ControlButton(title: "Stop", systemImage: "stop.fill", enabled: true) {
-                        controller.send(.stop)
+                        confirmingStop = true
                     }
                 }
                 ControlButton(
@@ -84,6 +86,12 @@ private struct TimerPanel: View {
                 }
             }
             .frame(maxWidth: 420)
+            .alert("Stop the timer?", isPresented: $confirmingStop) {
+                Button("Stop", role: .destructive) { controller.send(.stop) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The schedule resets to Rep 1 of Cycle 1. Work done so far is still logged.")
+            }
 
             if controller.notificationAuthorization == .denied {
                 Label("Notifications are off, so boundaries will not alert while the app is closed.", systemImage: "bell.slash")
@@ -197,7 +205,7 @@ struct AnalyticsRow: View {
         HStack {
             Text(title).foregroundStyle(Color.tpDimmed)
             Spacer()
-            Text("\(window.sessions) sess · \(window.cycles) cyc · \(window.workDurationText)")
+            Text(window.summaryText)
                 .font(.body.monospacedDigit())
         }
     }

@@ -52,8 +52,18 @@ struct SoundScreen: View {
                 RepeatRow(label: "Repeat haptic", value: controller.bind(\.flashRepeatCount))
                     .disabled(!controller.settings.flashEnabled)
                 Toggle("Show alert dialog", isOn: controller.bind(\.popupEnabled))
+                Stepper(value: controller.bind(\.popupDismissSeconds), in: 0...120, step: 5) {
+                    HStack {
+                        Text("Close dialog after")
+                        Spacer()
+                        Text(controller.settings.popupDismissSeconds == 0 ? "never" : "\(controller.settings.popupDismissSeconds)s")
+                            .font(.body.monospacedDigit())
+                            .foregroundStyle(Color.tpDimmed)
+                    }
+                }
+                .disabled(!controller.settings.popupEnabled)
             } footer: {
-                Text("The haptic and the dialog happen while the app is open.")
+                Text("The haptic and the dialog happen while the app is open. The dialog closes itself after the time set, or waits for a tap when set to never.")
             }
 
             Section("Notifications") {

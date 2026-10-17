@@ -118,13 +118,33 @@ final class StatusItemPresenter: NSResponder, MenuBarPresenting {
         }
         let color = dimmed ? base.withAlphaComponent(0.15) : base
 
-        if let text = presentation.text {
-            let attributes: [NSAttributedString.Key: Any] = [
-                .foregroundColor: color,
-                // Monospaced digits: a fixed-width title that never reflows the menu bar.
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 15, weight: .medium)
-            ]
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: color,
+            // Monospaced digits: a fixed-width title that never reflows the menu bar.
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 15, weight: .medium)
+        ]
 
+        if let symbolName = presentation.symbolName {
+            button.attributedTitle = NSAttributedString(string: "")
+            let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: "tech-pomodoro")
+            // A template image is what lets the glyph invert with the menu bar's appearance.
+            let isTemplate = presentation.adaptsToMenuBar && !dimmed
+            if let text = presentation.text, let symbol {
+                // The phase letter beside the clock. Drawn into the same image as the symbol, so one
+                // colour — or one template — covers both.
+                var ink = attributes
+                ink[.foregroundColor] = isTemplate ? NSColor.black : color
+                let image = Self.image(of: symbol, followedBy: text, attributes: ink)
+                image.isTemplate = isTemplate
+                button.image = image
+            } else if isTemplate {
+                symbol?.isTemplate = true
+                button.image = symbol
+            } else {
+                symbol?.isTemplate = false
+                button.image = symbol?.tinted(with: color)
+            }
+        } else if let text = presentation.text {
             if presentation.adaptsToMenuBar {
                 button.image = nil
                 button.attributedTitle = NSAttributedString(string: text, attributes: attributes)
@@ -135,17 +155,6 @@ final class StatusItemPresenter: NSResponder, MenuBarPresenting {
                 // puts the colour beyond AppKit's reach.
                 button.attributedTitle = NSAttributedString(string: "")
                 button.image = Self.image(of: text, attributes: attributes)
-            }
-        } else if let symbolName = presentation.symbolName {
-            button.attributedTitle = NSAttributedString(string: "")
-            let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "tech-pomodoro")
-            if presentation.adaptsToMenuBar && !dimmed {
-                // A template image is what lets the glyph invert with the menu bar's appearance.
-                image?.isTemplate = true
-                button.image = image
-            } else {
-                image?.isTemplate = false
-                button.image = image?.tinted(with: color)
             }
         }
 
@@ -211,6 +220,32 @@ private extension StatusItemPresenter {
 
         let image = NSImage(size: size, flipped: false) { rect in
             string.draw(at: NSPoint(x: 2, y: (rect.height - measured.height) / 2))
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    /// The clock symbol with the phase letter after it, in the colour the attributes carry.
+    static func image(of symbol: NSImage, followedBy text: String, attributes: [NSAttributedString.Key: Any]) -> NSImage {
+        let string = NSAttributedString(string: text, attributes: attributes)
+        let measured = string.size()
+        let ink = attributes[.foregroundColor] as? NSColor ?? .black
+        let glyph = symbol.tinted(with: ink)
+        let gap: CGFloat = 2
+        let size = NSSize(
+            width: ceil(glyph.size.width + gap + measured.width) + 4,
+            height: max(16, ceil(max(glyph.size.height, measured.height)))
+        )
+
+        let image = NSImage(size: size, flipped: false) { rect in
+            glyph.draw(in: NSRect(
+                x: 2,
+                y: (rect.height - glyph.size.height) / 2,
+                width: glyph.size.width,
+                height: glyph.size.height
+            ))
+            string.draw(at: NSPoint(x: 2 + glyph.size.width + gap, y: (rect.height - measured.height) / 2))
             return true
         }
         image.isTemplate = false

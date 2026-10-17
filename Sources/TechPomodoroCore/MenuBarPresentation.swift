@@ -13,9 +13,10 @@ public enum ColorToken: String, Sendable, Equatable, CaseIterable {
 
 /// Everything the status item needs in order to draw itself, with no AppKit types in sight.
 public struct MenuBarPresentation: Sendable, Equatable {
-    /// The title to draw, e.g. `"24"`. Nil in clock-icon mode.
+    /// The title to draw, e.g. `"24W"`. In clock-icon mode, just the phase letter beside the symbol;
+    /// nil when idle.
     public var text: String?
-    /// An SF Symbol name to draw instead of a title. Nil in minutes-remaining mode.
+    /// An SF Symbol name to draw, followed by `text` when both are set. Nil in minutes-remaining mode.
     public var symbolName: String?
     public var foreground: ColorToken
     /// Non-nil only when the user enabled a filled background.
@@ -78,12 +79,36 @@ public enum MenuBarFormatter {
             )
         }
 
+        // Paused is red in either mode, whatever else is configured: a stopped clock should never
+        // pass for a running one at a glance.
+        if state.activity == .paused {
+            switch settings.menuBarMode {
+            case .clockIcon:
+                return MenuBarPresentation(
+                    text: phaseLetter(state.phase),
+                    symbolName: "pause.circle",
+                    foreground: .alert,
+                    background: background,
+                    adaptsToMenuBar: false
+                )
+            case .minutesRemaining:
+                return MenuBarPresentation(
+                    text: countdownText(state.remaining(at: now), phase: state.phase),
+                    foreground: .alert,
+                    background: background,
+                    adaptsToMenuBar: false
+                )
+            }
+        }
+
         switch settings.menuBarMode {
         case .clockIcon:
-            // Clock-icon mode ignores the thresholds entirely.
+            // Clock-icon mode ignores the thresholds entirely. The phase letter rides beside the
+            // icon, since there are no digits to sit next to.
             let custom = restHex(for: state) ?? (settings.useCustomTextColor ? settings.menuBarTextColorHex : nil)
             return MenuBarPresentation(
-                symbolName: state.activity == .paused ? "pause.circle" : "timer",
+                text: phaseLetter(state.phase),
+                symbolName: "timer",
                 foreground: .primaryText,
                 background: background,
                 adaptsToMenuBar: background == nil && custom == nil,
@@ -96,13 +121,13 @@ public enum MenuBarFormatter {
             // A threshold colour is the whole point of the threshold, so it always wins; otherwise
             // the countdown adopts the menu bar's own colour like any other item.
             let isThreshold = token == .warning || token == .alert
-            // A chosen colour applies to the ordinary countdown only; a threshold still wins. The
-            // rest colour outranks the general custom colour, since it is the more specific signal —
-            // and it can never collide with a threshold, which is Work-only.
-            let custom = restHex(for: state)
-                ?? ((settings.useCustomTextColor && !isThreshold) ? settings.menuBarTextColorHex : nil)
+            // A chosen colour applies to the ordinary countdown only; a threshold still wins, in a
+            // rest phase as much as in Work. The rest colour outranks the general custom colour,
+            // since it is the more specific signal.
+            let custom = isThreshold ? nil : (restHex(for: state)
+                ?? (settings.useCustomTextColor ? settings.menuBarTextColorHex : nil))
             return MenuBarPresentation(
-                text: minutesText(remaining),
+                text: countdownText(remaining, phase: state.phase),
                 symbolName: nil,
                 foreground: token,
                 background: background,
@@ -110,6 +135,16 @@ public enum MenuBarFormatter {
                 customForegroundHex: custom
             )
         }
+    }
+
+    /// `W` during Work, `R` during any of the rest phases (Rest, Long Break, Session Rest).
+    public static func phaseLetter(_ phase: Phase) -> String {
+        phase == .work ? "W" : "R"
+    }
+
+    /// The menu bar title: the minutes left with the phase letter after them, e.g. `24W` or `4R`.
+    public static func countdownText(_ remaining: TimeInterval, phase: Phase) -> String {
+        minutesText(remaining) + phaseLetter(phase)
     }
 
     /// Minutes remaining, rounded up, so the title reads "1" for the whole final minute and only
@@ -148,10 +183,9 @@ public enum MenuBarFormatter {
         return "\(prefix)\(state.phase.title) \(clock)"
     }
 
-    /// Threshold colours apply to Work only, in minutes-remaining mode only; a threshold of `0`
-    /// disables that step.
+    /// Threshold colours apply to every phase alike — a rest running out warns the same way Work
+    /// does — in minutes-remaining mode only; a threshold of `0` disables that step.
     private static func foregroundToken(for state: PomodoroState, remaining: TimeInterval) -> ColorToken {
-        guard state.phase == .work else { return .primaryText }
         let settings = state.settings
 
         if settings.alertThresholdMinutes > 0,
