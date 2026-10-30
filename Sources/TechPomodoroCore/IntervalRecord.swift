@@ -17,18 +17,23 @@ public struct IntervalRecord: Codable, Sendable, Equatable, Identifiable {
     public let elapsedSeconds: Int
     /// `false` for a work interval ended early by Stop.
     public let completed: Bool
+    /// What the interval was spent on, when focus tracking saw it. Work records only; absent from
+    /// history written before focus tracking existed.
+    public var focus: FocusSummary?
 
     public init(
         id: UUID = UUID(),
         kind: Kind,
         startedAt: Date,
         elapsedSeconds: Int,
-        completed: Bool
+        completed: Bool,
+        focus: FocusSummary? = nil
     ) {
         self.id = id
         self.kind = kind
         self.startedAt = startedAt
         self.elapsedSeconds = elapsedSeconds
         self.completed = completed
+        self.focus = focus
     }
 }

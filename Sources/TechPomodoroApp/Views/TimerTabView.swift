@@ -13,6 +13,12 @@ struct TimerTabView: View {
             LabeledRow(label: "Phase", value: controller.state.activity == .idle ? "Idle" : controller.state.phase.title)
             LabeledRow(label: "Sessions completed", value: String(controller.state.completedSessions))
 
+            if controller.settings.focus.enabled {
+                Divider().overlay(Color.tpRule)
+
+                FocusPanel(controller: controller)
+            }
+
             Divider().overlay(Color.tpRule)
 
             AnalyticsPanel(controller: controller)

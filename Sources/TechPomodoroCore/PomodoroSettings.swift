@@ -58,6 +58,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
     public var soundName: String
     public var launchAtLogin: Bool
     public var sleepBehavior: SleepBehavior
+    /// Project tracking against ActivityWatch during Work intervals.
+    public var focus: FocusSettings
 
     public init(
         workMinutes: Int = 25,
@@ -83,7 +85,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         popupDismissSeconds: Int = 15,
         soundName: String = "Glass",
         launchAtLogin: Bool = false,
-        sleepBehavior: SleepBehavior = .continueThroughSleep
+        sleepBehavior: SleepBehavior = .continueThroughSleep,
+        focus: FocusSettings = FocusSettings()
     ) {
         self.workMinutes = workMinutes
         self.restMinutes = restMinutes
@@ -109,6 +112,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         self.soundName = soundName
         self.launchAtLogin = launchAtLogin
         self.sleepBehavior = sleepBehavior
+        self.focus = focus
     }
 
     /// A phase's configured length. Never zero: a phase of no length would let the reducer's
@@ -156,7 +160,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
             popupDismissSeconds: try value(.popupDismissSeconds, d.popupDismissSeconds),
             soundName: try value(.soundName, d.soundName),
             launchAtLogin: try value(.launchAtLogin, d.launchAtLogin),
-            sleepBehavior: try value(.sleepBehavior, d.sleepBehavior)
+            sleepBehavior: try value(.sleepBehavior, d.sleepBehavior),
+            focus: try value(.focus, d.focus)
         )
     }
 }

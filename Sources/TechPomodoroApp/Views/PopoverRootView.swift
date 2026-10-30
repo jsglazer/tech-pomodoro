@@ -11,6 +11,7 @@ struct PopoverRootView: View {
         case intervals = "Intervals"
         case settings = "Settings"
         case sound = "Sound"
+        case focus = "Focus"
 
         var id: String { rawValue }
     }
@@ -45,6 +46,7 @@ struct PopoverRootView: View {
                 case .intervals: IntervalsTabView(controller: controller)
                 case .settings: SettingsTabView(controller: controller)
                 case .sound: SoundTabView(controller: controller)
+                case .focus: FocusTabView(controller: controller)
                 }
             }
             .padding(12)

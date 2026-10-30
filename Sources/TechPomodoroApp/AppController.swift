@@ -15,6 +15,13 @@ final class AppController: ObservableObject {
     @Published private(set) var history: [IntervalRecord] = []
     @Published var loginItemWarning: String?
 
+    /// The focus picture of the Work interval in progress; nil outside Work or before the first poll.
+    @Published private(set) var focus: FocusSnapshot?
+    /// `Live`, `Offline — …`, `Off`, or `Waiting for Work`, for the popover.
+    @Published private(set) var focusStatus: String = "Waiting for Work"
+    /// The summary line of the Work interval that ended last.
+    @Published private(set) var lastFocusLine: String?
+
     /// Republished once a second purely so SwiftUI re-renders the countdown.
     ///
     /// Only while the popover is actually on screen: with it closed there is no SwiftUI view left to
@@ -44,6 +51,20 @@ final class AppController: ObservableObject {
     /// run loop that would otherwise let the `.common`-mode refresh timer re-enter `send` while this
     /// reduction is still on the stack, corrupting the state read after `handle(effects:)` returns.
     private var isPresentingPopup = false
+
+    private let focusSource = ActivityWatchSource()
+    /// `phaseStartedAt` of the Work interval being tracked. A new value means a new interval.
+    private var focusIntervalStart: Date?
+    private var focusActivity: FocusActivity?
+    private var manualAnchor: FocusProject?
+    private var driftAlertCount = 0
+    /// Set once the current off-anchor stretch has alerted; cleared when you get back on task, so
+    /// each stretch alerts once.
+    private var driftAlerted = false
+    private var lastFocusPoll: Date = .distantPast
+    private var focusPollInFlight = false
+    /// Seconds between ActivityWatch polls during Work.
+    private static let focusPollSeconds: TimeInterval = 5
 
     /// Display refresh only. It never advances the timer by itself: every reduction is handed the
     /// date from `dateProvider`, and remaining time is always derived from `phaseEndsAt`.
@@ -137,8 +158,13 @@ final class AppController: ObservableObject {
         self.now = now
         if isPopoverVisible { displayNow = now }
         state = PomodoroReducer.reduce(state, event, now)
+        // The record of a Work interval that just ended takes its focus summary before tracking moves
+        // on to whatever phase began, and before a boundary popup wants to quote it.
+        let records = attachFocus(to: state.pendingRecords)
+        trackFocusInterval()
         handle(effects: state.pendingEffects)
-        persist(records: state.pendingRecords, at: now)
+        persist(records: records, at: now)
+        pollFocusIfDue(at: now)
         refreshPresentation()
     }
 
@@ -179,6 +205,24 @@ final class AppController: ObservableObject {
     /// The rest-phase colour, as a SwiftUI binding for the settings picker.
     var restColor: Binding<Color> {
         hexBinding(\.restColorHex)
+    }
+
+    /// The drift colour, as a SwiftUI binding for the focus settings picker.
+    var driftColor: Binding<Color> {
+        hexBinding(\.focus.driftColorHex)
+    }
+
+    /// A list setting edited as one line per entry. Lines are kept as typed, blanks included, so the
+    /// editor never swallows the newline you just entered; every matcher skips blank entries.
+    func linesBinding(_ keyPath: WritableKeyPath<PomodoroSettings, [String]>) -> Binding<String> {
+        Binding(
+            get: { self.state.settings[keyPath: keyPath].joined(separator: "\n") },
+            set: { newValue in
+                var settings = self.state.settings
+                settings[keyPath: keyPath] = newValue.components(separatedBy: "\n")
+                self.update(settings: settings)
+            }
+        )
     }
 
     /// Bridges a `ColorPicker` to a `#RRGGBB` settings field, so a selection persists as the same
@@ -225,6 +269,10 @@ final class AppController: ObservableObject {
     private func popupText(for kind: AlertKind) -> (title: String, message: String) {
         switch kind {
         case .intervalEnd, .cycleEnd, .sessionEnd:
+            // Leaving Work, the line says what that pomodoro actually went on.
+            if state.phase != .work, let line = lastFocusLine {
+                return ("Time's up", "\(state.phase.title) is starting.\n\(line)")
+            }
             return ("Time's up", "\(state.phase.title) is starting.")
         case .sessionComplete:
             return ("Session complete", "The full schedule has finished.")
@@ -257,9 +305,140 @@ final class AppController: ObservableObject {
     }
 
     private func refreshPresentation() {
-        presenter?.apply(MenuBarFormatter.presentation(for: state, at: now))
+        presenter?.apply(MenuBarFormatter.presentation(for: state, at: now, focus: focus))
         presenter?.setTooltip(MenuBarFormatter.hoverText(for: state, at: now))
-        presenter?.setHoverInfo(MenuBarFormatter.hoverInfo(for: state, at: now))
+        presenter?.setHoverInfo(MenuBarFormatter.hoverInfo(for: state, at: now, focus: focus))
+    }
+
+    // MARK: - Focus
+
+    /// Projects seen so far this interval, most time first, for the anchor override menu.
+    var focusProjects: [FocusProject] {
+        guard let focus else { return [] }
+        var totals: [FocusProject: TimeInterval] = [:]
+        for (project, seconds) in focus.projectSeconds {
+            totals[project.at(settings.focus.driftLevel), default: 0] += seconds
+        }
+        return totals.sorted { $0.value > $1.value }.map(\.key)
+    }
+
+    /// Pins the anchor by hand for the rest of this interval; nil goes back to inferring it.
+    func setAnchor(_ project: FocusProject?) {
+        manualAnchor = project
+        driftAlerted = false
+        recomputeFocus()
+    }
+
+    /// Per-task totals from the history, for the popover.
+    func projectTotals(days: Int) -> [ProjectTotal] {
+        FocusAnalytics.projectTotals(records: history, now: dateProvider.now(), calendar: calendar, days: days)
+    }
+
+    func meanFocusShare(days: Int) -> Double? {
+        FocusAnalytics.meanFocusShare(records: history, now: dateProvider.now(), calendar: calendar, days: days)
+    }
+
+    private var isTrackingFocus: Bool {
+        settings.focus.enabled && state.activity != .idle && state.phase == .work
+    }
+
+    /// Hands the tracked interval's summary to its work record. Only the record that starts where the
+    /// tracked interval started gets one: a sleep catch-up can close several intervals at once, and
+    /// the earlier ones were never watched.
+    private func attachFocus(to records: [IntervalRecord]) -> [IntervalRecord] {
+        guard let start = focusIntervalStart, let focus else { return records }
+        return records.map { record in
+            guard record.kind == .work, record.startedAt == start else { return record }
+            var record = record
+            let summary = focus.summary(level: settings.focus.driftLevel, driftAlerts: driftAlertCount)
+            record.focus = summary
+            lastFocusLine = summary.lineText
+            return record
+        }
+    }
+
+    /// Starts tracking afresh whenever a new Work interval begins, and stops outside Work.
+    private func trackFocusInterval() {
+        let start = isTrackingFocus ? state.phaseStartedAt : nil
+        guard start != focusIntervalStart else { return }
+        focusIntervalStart = start
+        focus = nil
+        focusActivity = nil
+        manualAnchor = nil
+        driftAlertCount = 0
+        driftAlerted = false
+        lastFocusPoll = .distantPast
+        if !settings.focus.enabled {
+            focusStatus = "Off"
+        } else if start == nil {
+            focusStatus = "Waiting for Work"
+        } else {
+            focusStatus = "Connecting…"
+        }
+    }
+
+    private func pollFocusIfDue(at now: Date) {
+        guard isTrackingFocus, state.activity == .running, let start = focusIntervalStart,
+              !focusPollInFlight, now.timeIntervalSince(lastFocusPoll) >= Self.focusPollSeconds else { return }
+        lastFocusPoll = now
+        focusPollInFlight = true
+        let server = settings.focus.serverURL
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.focusPollInFlight = false }
+            do {
+                let activity = try await self.focusSource.fetch(server: server, from: start, to: self.dateProvider.now())
+                // The interval may have ended while the request was out.
+                guard self.focusIntervalStart == start else { return }
+                self.focusActivity = activity
+                self.focusStatus = "Live"
+                self.recomputeFocus()
+            } catch {
+                guard self.focusIntervalStart == start else { return }
+                self.focusStatus = "Offline — \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func recomputeFocus() {
+        guard let start = focusIntervalStart, let activity = focusActivity else { return }
+        let snapshot = FocusTracker.snapshot(
+            activity: activity,
+            from: start,
+            to: dateProvider.now(),
+            settings: settings.focus,
+            manualAnchor: manualAnchor
+        )
+        focus = snapshot
+        checkDrift(snapshot)
+        refreshPresentation()
+    }
+
+    /// One alert per stretch off the anchor, once it has run `driftAlertSeconds`.
+    private func checkDrift(_ snapshot: FocusSnapshot) {
+        guard snapshot.isDrifting else {
+            driftAlerted = false
+            return
+        }
+        let threshold = settings.focus.driftAlertSeconds
+        guard threshold > 0, !driftAlerted, !isPresentingPopup, state.activity == .running,
+              snapshot.offAnchorSeconds >= TimeInterval(threshold) else { return }
+        driftAlerted = true
+        driftAlertCount += 1
+
+        if settings.dingEnabled {
+            soundPlayer.play(named: settings.soundName, times: settings.dingRepeatCount)
+        }
+        if settings.flashEnabled {
+            presenter?.flash(times: settings.flashRepeatCount)
+        }
+        let off = Int(snapshot.offAnchorSeconds.rounded())
+        let anchor = snapshot.anchor.map { "Your focus: \($0.displayName)." } ?? "No project yet this interval."
+        let message = "\(off) s off task — now on \(snapshot.current.label).\n\(anchor)"
+        isPresentingPopup = true
+        let limit = settings.popupDismissSeconds
+        popupPresenter.present(title: "Drifting", message: message, dismissAfter: limit > 0 ? TimeInterval(limit) : nil)
+        isPresentingPopup = false
     }
 
     // MARK: - Export
