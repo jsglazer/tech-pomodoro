@@ -1,5 +1,14 @@
 # tech-pomodoro
 
+[![GitHub release](https://img.shields.io/github/v/release/jsglazer/tech-pomodoro?logo=github)](https://github.com/jsglazer/tech-pomodoro/releases)
+[![Swift 6.0](https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white)](https://swift.org)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/jsglazer/tech-pomodoro/blob/main/LICENSE)
+[![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97756?logo=anthropic)](https://claude.ai)
+[![Gemini Flash Antigravity](https://img.shields.io/badge/Gemini%20Flash-Antigravity-4f86f7?logo=google-gemini&logoColor=white)](https://github.com/google-gemini)
+[![CI](https://github.com/jsglazer/tech-pomodoro/actions/workflows/ci.yml/badge.svg)](https://github.com/jsglazer/tech-pomodoro/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/jsglazer/tech-pomodoro/actions/workflows/codeql.yml/badge.svg)](https://github.com/jsglazer/tech-pomodoro/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/jsglazer/tech-pomodoro/badge)](https://securityscorecards.dev/viewer/?uri=github.com/jsglazer/tech-pomodoro)
+
 A menu-bar-only Pomodoro timer for macOS, with a companion iPhone and iPad app, built around a multi-tier schedule: work/rest reps build a cycle, cycles build a session, and each level gets its own break.
 
 ## Why
@@ -15,7 +24,10 @@ Most Pomodoro apps stop at "work, rest, long break". tech-pomodoro adds the leve
 - **Sleep-aware.** By default the timer keeps counting against the wall clock through a system sleep and fast-forwards on wake to exactly the phase the clock implies, with a single catch-up ding rather than a backlog. It can pause on sleep instead.
 - **Hover readout.** Hovering the menu bar item shows the phase and the exact time left — `Rest 03:12` — in a panel at roughly twice tooltip size, tinted to match the menu bar.
 - **Analytics.** Sessions, cycles and reps completed and total work time for Today, the last 3 days, and the last 5 days, as calendar days in your timezone. A rep is a Work interval that ran to its end; one cut short by Stop or Skip adds its time but not a rep. Hover the panel to refresh it; the numbers are visible either way.
-- **Export.** The full interval history as CSV or JSON.
+- **Focus tracking.** During Work the app reads your local [ActivityWatch](https://activitywatch.net/) server every 5 seconds and works out what the pomodoro is actually going on. Obsidian notes, reported with their full path by [link-activitywatcher](https://github.com/jsglazer/link-activitywatcher), are filed under a project at two levels — an area (a class, `Classes/*/*` by default) and a task inside it (an assignment folder `Classes/*/*/Assign/*`, otherwise the next folder down, such as `Inventory`) — by folder rules you can edit. On-task apps (Anki, Zotero, PDF readers), any PDF, and allowed sites (`library.gmu.edu` and `schar.gmu.edu` by default) count toward the project; every other app or site is a distraction; away time, the lock screen and the app itself are ignored. Mac only.
+- **Drift alerts.** The anchor — the project a pomodoro is about — is inferred from the first 5 minutes, or pinned from the popover. While you are off it the countdown turns the drift colour (purple by default), and after 30 seconds straight off it one alert fires — ding, flash and a dialog naming what you are on — then not again until you are back on task. Drift can be judged per task or per class, and every threshold is configurable in the Focus tab.
+- **Focus history.** Each Work interval keeps its seconds per task, focus share, project switches and drift alerts. The Timer tab shows a live Focus panel (anchor, what you are on now, this interval's focus share) and today's time by project; the end-of-Work dialog adds a line like `Asgn03-TheoryHypotheses · 78% · 3 switches`.
+- **Export.** The full interval history as CSV or JSON, focus columns included.
 - **Launch at login**, via `SMAppService`.
 
 ## iPhone and iPad
@@ -52,8 +64,8 @@ For the iOS app, open `TechPomodoro.xcodeproj`, choose the `TechPomodoroiOS` sch
 
 The timer engine is a pure Swift state machine with no AppKit or SwiftUI anywhere in it:
 
-- `Sources/TechPomodoroCore` — the reducer, the analytics aggregator, the menu bar formatting model, and the stores. No UI imports, no reads of the system clock, no hardcoded paths. Every instant arrives as a parameter and every dependency is injected.
-- `Sources/TechPomodoroApp` — the macOS shell: the status item, the SwiftUI popover, `NSSound`, `SMAppService`, and the `NSWorkspace` sleep/wake observers. One 1-second runloop timer drives display refresh only; it never advances the timer, which is always derived from an absolute end timestamp against the injected clock. Because remaining time is derived rather than accumulated, that timer carries a 0.25s tolerance so macOS can coalesce its wakeup instead of forcing the CPU out of idle every second.
+- `Sources/TechPomodoroCore` — the reducer, the analytics aggregator, the menu bar formatting model, the stores, and the focus tracker (`Focus.swift`), which takes ActivityWatch spans in and returns per-project attribution, the anchor and the drift streak. No UI imports, no reads of the system clock, no hardcoded paths. Every instant arrives as a parameter and every dependency is injected.
+- `Sources/TechPomodoroApp` — the macOS shell: the status item, the SwiftUI popover, `NSSound`, `SMAppService`, the `NSWorkspace` sleep/wake observers, and `ActivityWatchSource`, the only code that talks HTTP to aw-server. One 1-second runloop timer drives display refresh only; it never advances the timer, which is always derived from an absolute end timestamp against the injected clock. Because remaining time is derived rather than accumulated, that timer carries a 0.25s tolerance so macOS can coalesce its wakeup instead of forcing the CPU out of idle every second.
 
 - `Sources/TechPomodoroiOS` — the iOS shell: the SwiftUI tabs, the session snapshot, the notification scheduler, the bundled-tone player and the Live Activity controller. The 1-second ticker runs only in the foreground, and background correctness comes entirely from `phaseEndsAt` plus the pre-scheduled notifications.
 - `Sources/TechPomodoroLiveActivity` — the WidgetKit extension that draws the Live Activity. It never links the core; the app flattens the state into plain values in `Sources/TechPomodoroShared`, which both targets compile along with the Live Activity's App Intents.
@@ -62,7 +74,7 @@ The timer engine is a pure Swift state machine with no AppKit or SwiftUI anywher
 
 The popover and its `NSHostingController` are built on each open and torn down in `popoverDidClose` — deliberately, not incidentally. A retained hosting controller keeps its SwiftUI view graph and the popover's window alive after the popover is dismissed, and AppKit's display cycle will go on laying out that invisible view indefinitely; on 1.0.8 that cost 47–59% CPU with nothing on screen. Keep the rule: no SwiftUI view graph should outlive the popover that shows it.
 
-That split is what makes the interesting parts testable: `swift test` covers the multi-tier transitions, sleep/wake fast-forward, pause/resume/stop/skip edge cases, threshold and paused colours, the phase letter, rolling analytics windows and rep counts, pruning, the persistence and export roundtrips, and `BoundaryPlanner`, which lays out the upcoming boundaries the iOS app schedules as notifications.
+That split is what makes the interesting parts testable: `swift test` covers the multi-tier transitions, sleep/wake fast-forward, pause/resume/stop/skip edge cases, threshold and paused colours, the phase letter, rolling analytics windows and rep counts, pruning, the persistence and export roundtrips, `BoundaryPlanner`, which lays out the upcoming boundaries the iOS app schedules as notifications, and the focus rules, classification, anchor and drift logic, and aw-server wire format.
 
 ```sh
 swift test
