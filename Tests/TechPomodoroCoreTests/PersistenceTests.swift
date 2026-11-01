@@ -95,7 +95,7 @@ struct PersistenceTests {
 
         #expect(decoded.workMinutes == 42)
         #expect(decoded.restMinutes == PomodoroSettings().restMinutes)
-        #expect(decoded.sleepBehavior == .continueThroughSleep)
+        #expect(decoded.sleepBehavior == .resumeOnWake)
         #expect(decoded.popupDismissSeconds == 15)
     }
 

@@ -17,6 +17,13 @@ public enum PomodoroReducer {
         s.pendingEffects = []
         s.pendingRecords = []
 
+        // Any event other than the sleep/wake pair or a tick means the user (or a settings change)
+        // has taken over, so a pending sleep-pause is no longer the sleep's to undo.
+        switch event {
+        case .willSleep, .didWake, .tick: break
+        default: s.pausedBySleep = false
+        }
+
         switch event {
         case .start:
             guard s.activity == .idle else { return s }
@@ -45,15 +52,39 @@ public enum PomodoroReducer {
             advance(&s, to: now)
 
         case .willSleep:
-            if s.settings.sleepBehavior == .pauseOnSleep {
+            switch s.settings.sleepBehavior {
+            case .continueThroughSleep:
+                break
+            case .pauseOnSleep:
                 pause(&s, at: now)
+            case .resumeOnWake:
+                // Catch any boundary that fell due a moment before sleep first, so the frozen
+                // remainder belongs to the phase the clock is really in.
+                advance(&s, to: now)
+                if s.activity == .running {
+                    pause(&s, at: now)
+                    s.pausedBySleep = true
+                }
             }
 
         case .didWake:
             // Under `continueThroughSleep` the schedule catches up to the wall clock. Under
-            // `pauseOnSleep` the timer was already frozen by `.willSleep` and stays that way.
-            if s.settings.sleepBehavior == .continueThroughSleep {
+            // `pauseOnSleep` the timer was already frozen by `.willSleep` and stays that way. Under
+            // `resumeOnWake` a timer the sleep froze picks up where it left off.
+            switch s.settings.sleepBehavior {
+            case .continueThroughSleep:
                 advance(&s, to: now)
+            case .pauseOnSleep:
+                break
+            case .resumeOnWake:
+                if s.pausedBySleep {
+                    s.pausedBySleep = false
+                    resume(&s, at: now)
+                } else {
+                    // Never slept through `.willSleep` (or it arrived late): don't leave a running
+                    // timer stale on screen.
+                    advance(&s, to: now)
+                }
             }
 
         case .settingsChanged(let newSettings):

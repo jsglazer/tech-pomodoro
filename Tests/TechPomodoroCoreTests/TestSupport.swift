@@ -30,7 +30,8 @@ enum Fixture {
         longBreak: Int = 15,
         cycles: Int = 2,
         sessionRest: Int = 60,
-        repeatSession: Bool = false
+        repeatSession: Bool = false,
+        sleepBehavior: SleepBehavior = .continueThroughSleep
     ) -> PomodoroSettings {
         PomodoroSettings(
             workMinutes: work,
@@ -39,7 +40,8 @@ enum Fixture {
             longBreakMinutes: longBreak,
             cyclesPerSession: cycles,
             sessionRestMinutes: sessionRest,
-            repeatSession: repeatSession
+            repeatSession: repeatSession,
+            sleepBehavior: sleepBehavior
         )
     }
 }

@@ -124,4 +124,91 @@ struct SleepWakeTests {
         #expect(stepwise.completedRepsInCycle == jumped.completedRepsInCycle)
         #expect(stepwise.completedCyclesInSession == jumped.completedCyclesInSession)
     }
+
+    // MARK: - resumeOnWake
+
+    @Test("resumeOnWake: an overnight sleep resumes the same phase with the same time left")
+    func resumeOnWakePicksUpWhereItLeftOff() {
+        let wake = Fixture.start.plus(minutes: 600)
+        let state = PomodoroState(settings: Fixture.settings(sleepBehavior: .resumeOnWake))
+            .applying([
+                (.start, Fixture.start),
+                (.willSleep, Fixture.start.plus(minutes: 10)),
+                (.didWake, wake)
+            ])
+
+        #expect(state.activity == .running)
+        #expect(state.phase == .work)
+        #expect(state.completedRepsInCycle == 0)
+        #expect(state.remaining(at: wake) == 15 * 60)
+        #expect(state.phaseEndsAt == wake.plus(minutes: 15))
+        #expect(state.pausedBySleep == false)
+        #expect(state.pendingEffects.isEmpty)
+        #expect(state.pendingRecords.isEmpty)
+    }
+
+    @Test("resumeOnWake: ticks during the sleep (dark wake) leave the frozen timer alone")
+    func resumeOnWakeIgnoresDarkWakeTicks() {
+        let state = PomodoroState(settings: Fixture.settings(sleepBehavior: .resumeOnWake))
+            .applying([
+                (.start, Fixture.start),
+                (.willSleep, Fixture.start.plus(minutes: 10)),
+                (.tick, Fixture.start.plus(minutes: 300)),
+                (.didWake, Fixture.start.plus(minutes: 600))
+            ])
+
+        #expect(state.activity == .running)
+        #expect(state.remaining(at: Fixture.start.plus(minutes: 600)) == 15 * 60)
+    }
+
+    @Test("resumeOnWake: a pause the user made before sleeping stays paused after wake")
+    func resumeOnWakeKeepsUserPause() {
+        let state = PomodoroState(settings: Fixture.settings(sleepBehavior: .resumeOnWake))
+            .applying([
+                (.start, Fixture.start),
+                (.pause, Fixture.start.plus(minutes: 5)),
+                (.willSleep, Fixture.start.plus(minutes: 10)),
+                (.didWake, Fixture.start.plus(minutes: 600))
+            ])
+
+        #expect(state.activity == .paused)
+        #expect(state.remaining(at: Fixture.start.plus(minutes: 600)) == 20 * 60)
+    }
+
+    @Test("resumeOnWake: an idle timer stays idle through sleep and wake")
+    func resumeOnWakeLeavesIdleAlone() {
+        let state = PomodoroState(settings: Fixture.settings(sleepBehavior: .resumeOnWake))
+            .applying([
+                (.willSleep, Fixture.start),
+                (.didWake, Fixture.start.plus(minutes: 600))
+            ])
+
+        #expect(state.activity == .idle)
+    }
+
+    @Test("resumeOnWake: a boundary already due at sleep is crossed before freezing")
+    func resumeOnWakeSettlesDueBoundaryFirst() {
+        let wake = Fixture.start.plus(minutes: 600)
+        let state = PomodoroState(settings: Fixture.settings(sleepBehavior: .resumeOnWake))
+            .applying([
+                (.start, Fixture.start),
+                (.willSleep, Fixture.start.plus(minutes: 27)),
+                (.didWake, wake)
+            ])
+
+        #expect(state.activity == .running)
+        #expect(state.phase == .rest)
+        #expect(state.remaining(at: wake) == 3 * 60)
+    }
+
+    @Test("resumeOnWake: a wake with no preceding sleep notice still catches a running timer up")
+    func resumeOnWakeWithoutWillSleepCatchesUp() {
+        let state = PomodoroState(settings: Fixture.settings(sleepBehavior: .resumeOnWake))
+            .applying([
+                (.start, Fixture.start),
+                (.didWake, Fixture.start.plus(minutes: 26))
+            ])
+
+        #expect(state.phase == .rest)
+    }
 }

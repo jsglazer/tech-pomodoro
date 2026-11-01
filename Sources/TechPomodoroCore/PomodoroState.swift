@@ -46,6 +46,10 @@ public struct PomodoroState: Sendable, Equatable {
     public var completedCyclesInSession: Int
     public var completedSessions: Int
 
+    /// True only while the timer is paused because the Mac went to sleep under `resumeOnWake`, so
+    /// the wake resumes a sleep pause but never a pause the user made themselves.
+    public var pausedBySleep: Bool
+
     public var settings: PomodoroSettings
 
     /// Effects produced by the most recent reduction only. Each reduction replaces them, so they
@@ -64,6 +68,7 @@ public struct PomodoroState: Sendable, Equatable {
         self.completedRepsInCycle = 0
         self.completedCyclesInSession = 0
         self.completedSessions = 0
+        self.pausedBySleep = false
         self.settings = settings
         self.pendingEffects = []
         self.pendingRecords = []

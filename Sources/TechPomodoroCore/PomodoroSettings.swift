@@ -12,6 +12,9 @@ public enum SleepBehavior: String, Codable, Sendable, CaseIterable {
     case continueThroughSleep
     /// Pause on sleep and stay paused until the user resumes.
     case pauseOnSleep
+    /// Freeze on sleep and pick up exactly where it left off on wake — same phase, same time
+    /// remaining, running again without a click. Sleep time is neither counted nor logged.
+    case resumeOnWake
 }
 
 /// Every user-configurable value, as one `Codable` value type.
@@ -85,7 +88,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         popupDismissSeconds: Int = 15,
         soundName: String = "Glass",
         launchAtLogin: Bool = false,
-        sleepBehavior: SleepBehavior = .continueThroughSleep,
+        sleepBehavior: SleepBehavior = .resumeOnWake,
         focus: FocusSettings = FocusSettings()
     ) {
         self.workMinutes = workMinutes

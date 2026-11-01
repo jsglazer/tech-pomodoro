@@ -54,6 +54,7 @@ struct SettingsTabView: View {
             Divider().overlay(Color.tpRule)
 
             Picker("On sleep", selection: controller.bind(\.sleepBehavior)) {
+                Text("Resume").tag(SleepBehavior.resumeOnWake)
                 Text("Keep counting").tag(SleepBehavior.continueThroughSleep)
                 Text("Pause").tag(SleepBehavior.pauseOnSleep)
             }
