@@ -1,5 +1,6 @@
 import SwiftUI
 import TechPomodoroCore
+import TechPomodoroSync
 
 /// Menu bar appearance, thresholds, sleep behaviour, launch at login, and export.
 struct SettingsTabView: View {
@@ -71,6 +72,14 @@ struct SettingsTabView: View {
                     .font(.caption2)
                     .foregroundStyle(Color.tpWarning)
             }
+
+            Divider().overlay(Color.tpRule)
+
+            Toggle("Sync via iCloud", isOn: controller.bind(\.cloudSyncEnabled))
+                .toggleStyle(.switch)
+            Text("Settings and history, across your Macs and iPhone. \(controller.syncStatus.label)")
+                .font(.caption2)
+                .foregroundStyle(controller.syncStatus.isProblem ? Color.tpWarning : Color.tpDimmed)
 
             Divider().overlay(Color.tpRule)
 

@@ -1,6 +1,7 @@
 import Combine
 import SwiftUI
 import TechPomodoroCore
+import TechPomodoroSync
 import UIKit
 
 /// The iOS shell around the pure core — the counterpart of the Mac's `AppController`, kept the same
@@ -26,6 +27,8 @@ final class PomodoroController: ObservableObject {
         didSet { schedulePopupDismissal() }
     }
     @Published private(set) var notificationAuthorization: NotificationScheduler.Authorization = .notDetermined
+    /// The iCloud sync row in Settings.
+    @Published private(set) var syncStatus: CloudSyncStatus = .off
 
     let soundCatalog: BundledSoundCatalog
 
@@ -45,6 +48,11 @@ final class PomodoroController: ObservableObject {
     /// Foreground only. It crosses boundaries on time while the app is open; with the app in the
     /// background the notifications and the Live Activity take over and this is stopped.
     private var refreshTimer: Timer?
+
+    /// Settings and history sync through iCloud. Started on the first foreground rather than in
+    /// `init`, so a Live Activity intent's background launch never spins up CloudKit.
+    private var cloudSync: CloudSync?
+    private var syncStatusSubscription: AnyCancellable?
 
     init(
         dateProvider: DateProvider = .system,
@@ -109,6 +117,11 @@ final class PomodoroController: ObservableObject {
     /// timer that kept running (its notifications firing) stuck on a stale phase. `.willSleep` is
     /// never sent on iOS for the same reason — it would pause the timer on every app switch.
     func sceneDidBecomeActive() {
+        if cloudSync == nil {
+            startSync()
+        } else {
+            cloudSync?.fetchNow()
+        }
         send(.tick)
         startRefreshing()
         scheduleDidChange(at: dateProvider.now())
@@ -154,8 +167,43 @@ final class PomodoroController: ObservableObject {
     }
 
     func update(settings newSettings: PomodoroSettings) {
+        let old = state.settings
         settingsStore.save(newSettings)
+        cloudSync?.settingsChanged(from: old, to: newSettings)
         send(.settingsChanged(newSettings))
+        if old.cloudSyncEnabled != newSettings.cloudSyncEnabled {
+            cloudSync?.setEnabled(newSettings.cloudSyncEnabled)
+        }
+    }
+
+    // MARK: - iCloud sync
+
+    private func startSync() {
+        let sync = CloudSync(
+            intervalStore: intervalStore,
+            settingsStore: settingsStore,
+            stateURL: CloudSync.defaultStateURL(),
+            calendar: calendar
+        ) { [weak self] change in
+            self?.applySynced(change)
+        }
+        cloudSync = sync
+        syncStatusSubscription = sync.$status.sink { [weak self] status in
+            self?.syncStatus = status
+        }
+        sync.setEnabled(state.settings.cloudSyncEnabled)
+    }
+
+    /// Something another device changed, already written to the local stores by `CloudSync`.
+    private func applySynced(_ change: CloudSync.Change) {
+        switch change {
+        case .history(let records):
+            history = records
+            recomputeAnalytics(at: dateProvider.now())
+        case .settings(let settings):
+            // Straight to the reducer, so the change is not stamped as a local edit and echoed back.
+            send(.settingsChanged(settings))
+        }
     }
 
     /// Mutates one field of the settings and persists the result.
@@ -286,6 +334,7 @@ final class PomodoroController: ObservableObject {
         do {
             history = try intervalStore.append(records, now: now, calendar: calendar)
             recomputeAnalytics(at: now)
+            cloudSync?.recordsAdded(records)
         } catch {
             // A failed history write must never take the timer down with it.
             NSLog("tech-pomodoro: could not write interval history: \(error.localizedDescription)")

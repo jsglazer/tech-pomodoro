@@ -1,5 +1,6 @@
 import SwiftUI
 import TechPomodoroCore
+import TechPomodoroSync
 import UIKit
 
 /// The time blocks: the durations and the shape of the cycle and the session.
@@ -138,6 +139,15 @@ struct SettingsScreen: View {
                 Toggle("Custom countdown colour", isOn: controller.bind(\.useCustomTextColor))
                 ColorPicker("Countdown colour", selection: controller.countdownColor, supportsOpacity: false)
                     .disabled(!controller.settings.useCustomTextColor)
+            }
+
+            Section {
+                Toggle("Sync via iCloud", isOn: controller.bind(\.cloudSyncEnabled))
+            } header: {
+                Text("iCloud")
+            } footer: {
+                Text("Settings and history, across your Macs and iPhone. \(controller.syncStatus.label)")
+                    .foregroundStyle(controller.syncStatus.isProblem ? Color.tpWarning : Color.tpDimmed)
             }
 
             Section {

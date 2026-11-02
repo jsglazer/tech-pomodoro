@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import SwiftUI
 import TechPomodoroCore
+import TechPomodoroSync
 
 /// The OS shell around the pure core.
 ///
@@ -14,6 +15,8 @@ final class AppController: ObservableObject {
     @Published private(set) var analytics: AnalyticsSummary = .empty
     @Published private(set) var history: [IntervalRecord] = []
     @Published var loginItemWarning: String?
+    /// The iCloud sync row in Settings.
+    @Published private(set) var syncStatus: CloudSyncStatus = .off
 
     /// The focus picture of the Work interval in progress; nil outside Work or before the first poll.
     @Published private(set) var focus: FocusSnapshot?
@@ -69,6 +72,10 @@ final class AppController: ObservableObject {
     /// Display refresh only. It never advances the timer by itself: every reduction is handed the
     /// date from `dateProvider`, and remaining time is always derived from `phaseEndsAt`.
     private var refreshTimer: Timer?
+
+    /// Settings and history sync through iCloud; nil until `startSync()`.
+    private var cloudSync: CloudSync?
+    private var syncStatusSubscription: AnyCancellable?
 
     init(
         dateProvider: DateProvider = .system,
@@ -134,7 +141,10 @@ final class AppController: ObservableObject {
         isPopoverVisible = visible
         // Opening: hand SwiftUI the current time up front, so the countdown is right on the first
         // frame rather than showing the stale date until the next tick.
-        if visible { displayNow = now }
+        if visible {
+            displayNow = now
+            cloudSync?.fetchNow()
+        }
     }
 
     func observeWorkspace() {
@@ -143,7 +153,41 @@ final class AppController: ObservableObject {
             MainActor.assumeIsolated { self?.send(.willSleep) }
         }
         center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.send(.didWake) }
+            MainActor.assumeIsolated {
+                self?.send(.didWake)
+                // Another device may have logged intervals or changed settings while this Mac slept.
+                self?.cloudSync?.fetchNow()
+            }
+        }
+    }
+
+    /// Brings up iCloud sync, honouring the per-device switch in Settings.
+    func startSync() {
+        let sync = CloudSync(
+            intervalStore: intervalStore,
+            settingsStore: settingsStore,
+            stateURL: CloudSync.defaultStateURL(),
+            calendar: calendar
+        ) { [weak self] change in
+            self?.applySynced(change)
+        }
+        cloudSync = sync
+        syncStatusSubscription = sync.$status.sink { [weak self] status in
+            self?.syncStatus = status
+        }
+        sync.setEnabled(state.settings.cloudSyncEnabled)
+    }
+
+    /// Something another device changed, already written to the local stores by `CloudSync`.
+    private func applySynced(_ change: CloudSync.Change) {
+        switch change {
+        case .history(let records):
+            history = records
+            recomputeAnalytics(at: dateProvider.now())
+        case .settings(let settings):
+            // Straight to the reducer: routing through `update(settings:)` would stamp it as a local
+            // edit and push it straight back.
+            send(.settingsChanged(settings))
         }
     }
 
@@ -169,8 +213,13 @@ final class AppController: ObservableObject {
     }
 
     func update(settings newSettings: PomodoroSettings) {
+        let old = state.settings
         settingsStore.save(newSettings)
+        cloudSync?.settingsChanged(from: old, to: newSettings)
         send(.settingsChanged(newSettings))
+        if old.cloudSyncEnabled != newSettings.cloudSyncEnabled {
+            cloudSync?.setEnabled(newSettings.cloudSyncEnabled)
+        }
     }
 
     /// Mutates one field of the settings and persists the result.
@@ -284,6 +333,7 @@ final class AppController: ObservableObject {
         do {
             history = try intervalStore.append(records, now: now, calendar: calendar)
             recomputeAnalytics(at: now)
+            cloudSync?.recordsAdded(records)
         } catch {
             // A failed history write must never take the timer down with it.
             NSLog("tech-pomodoro: could not write interval history: \(error.localizedDescription)")

@@ -13,6 +13,8 @@ let package = Package(
     products: [
         // Platform-agnostic domain logic. The whole headless test suite runs against this.
         .library(name: "TechPomodoroCore", targets: ["TechPomodoroCore"]),
+        // CloudKit sync of settings and history, shared by the Mac and iOS apps.
+        .library(name: "TechPomodoroSync", targets: ["TechPomodoroSync"]),
         // The OS shell (AppKit status item + SwiftUI popover). Not part of the headless gate.
         .executable(name: "TechPomodoroApp", targets: ["TechPomodoroApp"])
     ],
@@ -25,10 +27,19 @@ let package = Package(
             ]
         ),
 
+        // MARK: - iCloud sync (CloudKit; every merge rule it applies lives in the core)
+        .target(
+            name: "TechPomodoroSync",
+            dependencies: ["TechPomodoroCore"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6)
+            ]
+        ),
+
         // MARK: - OS shell
         .executableTarget(
             name: "TechPomodoroApp",
-            dependencies: ["TechPomodoroCore"],
+            dependencies: ["TechPomodoroCore", "TechPomodoroSync"],
             resources: [
                 .process("Resources")
             ],

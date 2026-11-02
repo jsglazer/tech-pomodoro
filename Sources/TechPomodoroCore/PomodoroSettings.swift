@@ -63,6 +63,9 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
     public var sleepBehavior: SleepBehavior
     /// Project tracking against ActivityWatch during Work intervals.
     public var focus: FocusSettings
+    /// Sync settings and history through the user's private iCloud (CloudKit) database. Per device:
+    /// it is never itself synced, so turning it off on one device leaves the others alone.
+    public var cloudSyncEnabled: Bool
 
     public init(
         workMinutes: Int = 25,
@@ -89,7 +92,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         soundName: String = "Glass",
         launchAtLogin: Bool = false,
         sleepBehavior: SleepBehavior = .resumeOnWake,
-        focus: FocusSettings = FocusSettings()
+        focus: FocusSettings = FocusSettings(),
+        cloudSyncEnabled: Bool = true
     ) {
         self.workMinutes = workMinutes
         self.restMinutes = restMinutes
@@ -116,6 +120,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         self.launchAtLogin = launchAtLogin
         self.sleepBehavior = sleepBehavior
         self.focus = focus
+        self.cloudSyncEnabled = cloudSyncEnabled
     }
 
     /// A phase's configured length. Never zero: a phase of no length would let the reducer's
@@ -164,7 +169,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
             soundName: try value(.soundName, d.soundName),
             launchAtLogin: try value(.launchAtLogin, d.launchAtLogin),
             sleepBehavior: try value(.sleepBehavior, d.sleepBehavior),
-            focus: try value(.focus, d.focus)
+            focus: try value(.focus, d.focus),
+            cloudSyncEnabled: try value(.cloudSyncEnabled, d.cloudSyncEnabled)
         )
     }
 }

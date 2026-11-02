@@ -34,12 +34,14 @@
 		94DD93CBAD0043F62BE70BE5 /* SettingsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19C931490756CA6ACA333AD4 /* SettingsTabView.swift */; };
 		959DF4861435B6DAC14653FB /* IntervalsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CD536D319A642F68A90A198 /* IntervalsTabView.swift */; };
 		96E2D9956AC3EA0944CD23EB /* FocusTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E089491A9F70E0DDCDB7C621 /* FocusTabView.swift */; };
+		99B04A43F4BB63F70536CB70 /* TechPomodoroSync in Frameworks */ = {isa = PBXBuildFile; productRef = EFE6F4D2120F7DA7FA60F90E /* TechPomodoroSync */; };
 		9A72140BC827D796173776ED /* Theme+Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CB213528DF3F898CB462CB /* Theme+Tokens.swift */; };
 		9B7E068A6A6CCA2454CCD9C9 /* HoverPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE7850DC3A0A37254A638DF6 /* HoverPanel.swift */; };
 		9CE6BF065848E6DD3B946995 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D55BA8A1FE45355532B29E /* LiveActivityController.swift */; };
 		9D57C32A1AD97564626503E5 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFFF6A912D8662F247614ABC /* RootView.swift */; };
 		9E569BC561877D37F1AE2D21 /* TimerTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E753CDA458F71AA57C1C273 /* TimerTabView.swift */; };
 		9ED0EF4FE2BE47D0F54E79B4 /* TimerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400C1BBBA0F41A32A31071E7 /* TimerScreen.swift */; };
+		A6E6261F11DF22D35EE160C3 /* TechPomodoroSync in Frameworks */ = {isa = PBXBuildFile; productRef = C7396FF21AA9F9EC61254E4E /* TechPomodoroSync */; };
 		AB75BA908616C31E5E8612DE /* Tick.caf in Resources */ = {isa = PBXBuildFile; fileRef = 4353C54A38D97291C798BDBA /* Tick.caf */; };
 		ADDFE8DD5A92A9500039CC21 /* PomodoroIntentHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9D397DFD4C276E4B4FF7D7 /* PomodoroIntentHandler.swift */; };
 		B1280D5A2174FB339EB14840 /* PomodoroIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7417BBA9CB4B582241FE0916 /* PomodoroIntents.swift */; };
@@ -103,6 +105,7 @@
 		72E95E7F7B0B68B10D580AEF /* Glass.caf */ = {isa = PBXFileReference; path = Glass.caf; sourceTree = "<group>"; };
 		7417BBA9CB4B582241FE0916 /* PomodoroIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomodoroIntents.swift; sourceTree = "<group>"; };
 		85E70AA1DB999C815063B6C8 /* TechPomodoroLiveActivity.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = TechPomodoroLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		969C0C5F0CCC74B914E38D7F /* TechPomodoro.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TechPomodoro.entitlements; sourceTree = "<group>"; };
 		97C7F119A88710E7396C2079 /* AppController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppController.swift; sourceTree = "<group>"; };
 		A642378DA86F1873C147F9BD /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		A961169B2743C9280ED7C0A9 /* StatusItemPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemPresenter.swift; sourceTree = "<group>"; };
@@ -130,6 +133,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3812ECEBD1F0EF3B1F1E8F1B /* TechPomodoroCore in Frameworks */,
+				A6E6261F11DF22D35EE160C3 /* TechPomodoroSync in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -138,6 +142,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8BB876AEF6050844BC45F3FB /* TechPomodoroCore in Frameworks */,
+				99B04A43F4BB63F70536CB70 /* TechPomodoroSync in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -222,6 +227,7 @@
 				60D8FFA0F648285E3203E445 /* PopupAlertService.swift */,
 				B0A7444134F52FD87A2E276C /* SoundServices.swift */,
 				A961169B2743C9280ED7C0A9 /* StatusItemPresenter.swift */,
+				969C0C5F0CCC74B914E38D7F /* TechPomodoro.entitlements */,
 				B2F88ADDB1A1A0FE3257C713 /* TechPomodoroApp.swift */,
 				A642378DA86F1873C147F9BD /* Theme.swift */,
 			);
@@ -327,6 +333,7 @@
 			name = TechPomodoroiOS;
 			packageProductDependencies = (
 				0D738F6A998B45604C709FC1 /* TechPomodoroCore */,
+				EFE6F4D2120F7DA7FA60F90E /* TechPomodoroSync */,
 			);
 			productName = TechPomodoroiOS;
 			productReference = 156FED9A39ECBA6679CEAE07 /* TechPomodoroiOS.app */;
@@ -347,6 +354,7 @@
 			name = TechPomodoro;
 			packageProductDependencies = (
 				4A50958B477135E0CF03A5E0 /* TechPomodoroCore */,
+				C7396FF21AA9F9EC61254E4E /* TechPomodoroSync */,
 			);
 			productName = TechPomodoro;
 			productReference = F3224FC4AE4B9A3751AA49F7 /* TechPomodoro.app */;
@@ -621,7 +629,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.13;
+				MARKETING_VERSION = 1.0.14;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -635,6 +643,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/TechPomodoroApp/TechPomodoro.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -730,7 +739,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.13;
+				MARKETING_VERSION = 1.0.14;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -745,6 +754,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/TechPomodoroApp/TechPomodoro.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -821,6 +831,14 @@
 		4A50958B477135E0CF03A5E0 /* TechPomodoroCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TechPomodoroCore;
+		};
+		C7396FF21AA9F9EC61254E4E /* TechPomodoroSync */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TechPomodoroSync;
+		};
+		EFE6F4D2120F7DA7FA60F90E /* TechPomodoroSync */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TechPomodoroSync;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
