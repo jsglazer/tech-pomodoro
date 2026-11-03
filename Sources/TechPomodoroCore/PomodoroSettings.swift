@@ -66,6 +66,9 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
     /// Sync settings and history through the user's private iCloud (CloudKit) database. Per device:
     /// it is never itself synced, so turning it off on one device leaves the others alone.
     public var cloudSyncEnabled: Bool
+    /// Mac: push this Mac's timer to the iPhone's Live Activity. iPhone: show a Mac's timer in place
+    /// of its own while one is active. Per device, never synced.
+    public var mirrorEnabled: Bool
 
     public init(
         workMinutes: Int = 25,
@@ -93,7 +96,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         launchAtLogin: Bool = false,
         sleepBehavior: SleepBehavior = .resumeOnWake,
         focus: FocusSettings = FocusSettings(),
-        cloudSyncEnabled: Bool = true
+        cloudSyncEnabled: Bool = true,
+        mirrorEnabled: Bool = true
     ) {
         self.workMinutes = workMinutes
         self.restMinutes = restMinutes
@@ -121,6 +125,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         self.sleepBehavior = sleepBehavior
         self.focus = focus
         self.cloudSyncEnabled = cloudSyncEnabled
+        self.mirrorEnabled = mirrorEnabled
     }
 
     /// A phase's configured length. Never zero: a phase of no length would let the reducer's
@@ -170,7 +175,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
             launchAtLogin: try value(.launchAtLogin, d.launchAtLogin),
             sleepBehavior: try value(.sleepBehavior, d.sleepBehavior),
             focus: try value(.focus, d.focus),
-            cloudSyncEnabled: try value(.cloudSyncEnabled, d.cloudSyncEnabled)
+            cloudSyncEnabled: try value(.cloudSyncEnabled, d.cloudSyncEnabled),
+            mirrorEnabled: try value(.mirrorEnabled, d.mirrorEnabled)
         )
     }
 }

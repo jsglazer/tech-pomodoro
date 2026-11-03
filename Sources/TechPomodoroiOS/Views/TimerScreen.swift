@@ -11,7 +11,16 @@ struct TimerScreen: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                if sizeClass == .regular {
+                if let mirror = controller.mirror {
+                    // A Mac timer is active: it wins, shown display only.
+                    VStack(spacing: 24) {
+                        MirrorPanel(content: mirror)
+                        MirrorUpNextPanel(content: mirror)
+                    }
+                    .frame(maxWidth: 520)
+                    .frame(maxWidth: .infinity)
+                    .padding(20)
+                } else if sizeClass == .regular {
                     HStack(alignment: .top, spacing: 32) {
                         TimerPanel(controller: controller)
                         VStack(spacing: 20) {
@@ -74,10 +83,12 @@ private struct TimerPanel: View {
                         confirmingStop = true
                     }
                 }
+                // Pause in yellow, Resume in green, so the button says which way it goes.
                 ControlButton(
                     title: state.activity == .paused ? "Resume" : "Pause",
                     systemImage: state.activity == .paused ? "play.fill" : "pause.fill",
-                    enabled: state.activity != .idle
+                    enabled: state.activity != .idle,
+                    tint: state.activity == .paused ? .tpSuccess : .tpWarning
                 ) {
                     controller.send(.toggleRunning)
                 }
@@ -101,6 +112,85 @@ private struct TimerPanel: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// A Mac's timer, mirrored: the same ring and digits as the iPhone's own, but no controls — the Mac
+/// is driven from the Mac. The iPhone's own timer carries on underneath and comes back when the Mac
+/// goes idle.
+private struct MirrorPanel: View {
+    let content: MirrorContent
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Label("\(content.phaseTitle.uppercased()) · \(content.mirroredFrom ?? "MAC")", systemImage: "laptopcomputer")
+                .font(.system(size: 13, weight: .semibold))
+                .tracking(1.6)
+                .foregroundStyle(Color.tpDimmed)
+
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let color = content.isPaused ? Color.tpAlert : Color(hexString: content.tintHex)
+                ZStack {
+                    Circle()
+                        .stroke(Color.tpRule, lineWidth: 10)
+                    Circle()
+                        .trim(from: 0, to: content.progress(at: context.date))
+                        .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 1), value: content.progress(at: context.date))
+                    digits(at: context.date)
+                        .font(.system(size: 64, weight: .medium, design: .monospaced))
+                        .foregroundStyle(color)
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(1)
+                        .padding(.horizontal, 24)
+                }
+                .aspectRatio(1, contentMode: .fit)
+            }
+            .frame(maxWidth: 320)
+
+            Text(content.progressLine)
+                .font(.subheadline)
+                .foregroundStyle(Color.tpDimmed)
+
+            Label(content.isPaused ? "Paused on your Mac. Controls are on the Mac." : "Mirroring your Mac. Controls are on the Mac.", systemImage: "info.circle")
+                .font(.footnote)
+                .foregroundStyle(Color.tpDimmed)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func digits(at now: Date) -> some View {
+        if content.isPaused || content.phaseEndsAt <= now {
+            let seconds = Int(content.remaining(at: now).rounded(.up))
+            Text(String(format: "%02d:%02d", seconds / 60, seconds % 60))
+        } else {
+            Text(timerInterval: content.phaseStartedAt...content.phaseEndsAt, countsDown: true)
+        }
+    }
+}
+
+private struct MirrorUpNextPanel: View {
+    let content: MirrorContent
+
+    var body: some View {
+        if !content.upcoming.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel("UP NEXT ON THE MAC")
+                ForEach(content.upcoming, id: \.startsAt) { next in
+                    HStack {
+                        Text(next.title)
+                        Spacer()
+                        Text(next.startsAt, style: .time)
+                            .font(.body.monospacedDigit())
+                            .foregroundStyle(Color.tpDimmed)
+                    }
+                }
+            }
+            .panelStyle()
+        }
     }
 }
 
@@ -238,6 +328,7 @@ private struct ControlButton: View {
     let title: String
     let systemImage: String
     let enabled: Bool
+    var tint: Color = .tpPrimary
     let action: () -> Void
 
     var body: some View {
@@ -250,7 +341,7 @@ private struct ControlButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(Color.tpPrimary)
+        .foregroundStyle(tint)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
     }

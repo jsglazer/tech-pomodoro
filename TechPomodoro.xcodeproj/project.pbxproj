@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		015E6BFCA0365AF23446B71A /* NotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C377F04604CD5A0C12A108E /* NotificationScheduler.swift */; };
+		12D7C7C6107FAF45CF1D4D90 /* APNsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 587A68DDC4E3D1EC6BE96A17 /* APNsClient.swift */; };
 		1574F21B2449C264DD23AFCC /* ActivityWatchSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F1023918467E96E9E5C9D2B /* ActivityWatchSource.swift */; };
 		1BE3E42E76615E2DD526A938 /* TechPomodoroiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF56F3C1F3AC2928158D92FC /* TechPomodoroiOSApp.swift */; };
 		1E4BA4061D4BE7C0F6C63D02 /* PomodoroActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114743B784961E638E5972B8 /* PomodoroActivityAttributes.swift */; };
@@ -17,6 +18,7 @@
 		290838491C45FFDB49E769F0 /* PomodoroActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114743B784961E638E5972B8 /* PomodoroActivityAttributes.swift */; };
 		2E32D374E2F9FCBC3786F8D5 /* SoundServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317D5F1355D98538F27D4DA0 /* SoundServices.swift */; };
 		3518F8D392FFEEDE51F158D8 /* PomodoroIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7417BBA9CB4B582241FE0916 /* PomodoroIntents.swift */; };
+		364F8916A4FD796D6ADE7A3E /* MirrorPusher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 390CA56B331CD69D996D425C /* MirrorPusher.swift */; };
 		377470944C69CFDAF34AD6F4 /* PomodoroController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6388597E536C6DBAD7B22932 /* PomodoroController.swift */; };
 		3812ECEBD1F0EF3B1F1E8F1B /* TechPomodoroCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4A50958B477135E0CF03A5E0 /* TechPomodoroCore */; };
 		3AA8591C8256EF51CFC7E1D4 /* Bell.caf in Resources */ = {isa = PBXBuildFile; fileRef = FCB41D4B50EB3AB65BED6F54 /* Bell.caf */; };
@@ -28,6 +30,7 @@
 		59B33E72CAFA90CEAD939A0A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA1EAB9181E82D564AD9CEC6 /* Assets.xcassets */; };
 		600EA422A77575327D0A7F37 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C32467675C3F6A1F0565A4BD /* Assets.xcassets */; };
 		66375F1A0D4DDD449D3B1850 /* TechPomodoroApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2F88ADDB1A1A0FE3257C713 /* TechPomodoroApp.swift */; };
+		6B4AD63AA7E23EEE5A852B62 /* MirrorReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55939192A0BDED7D6877CD3C /* MirrorReceiver.swift */; };
 		8BB876AEF6050844BC45F3FB /* TechPomodoroCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0D738F6A998B45604C709FC1 /* TechPomodoroCore */; };
 		8D3CF0C09B0C7760A90FA46A /* TechPomodoroLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 85E70AA1DB999C815063B6C8 /* TechPomodoroLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		92BE971C6A2AA72DCD082FEE /* SoundServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0A7444134F52FD87A2E276C /* SoundServices.swift */; };
@@ -89,11 +92,14 @@
 		19C931490756CA6ACA333AD4 /* SettingsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTabView.swift; sourceTree = "<group>"; };
 		1A14D75459AACE4E76D726B1 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		317D5F1355D98538F27D4DA0 /* SoundServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundServices.swift; sourceTree = "<group>"; };
+		390CA56B331CD69D996D425C /* MirrorPusher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorPusher.swift; sourceTree = "<group>"; };
 		400C1BBBA0F41A32A31071E7 /* TimerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerScreen.swift; sourceTree = "<group>"; };
 		4353C54A38D97291C798BDBA /* Tick.caf */ = {isa = PBXFileReference; path = Tick.caf; sourceTree = "<group>"; };
 		4C049227522F4D68AAC66230 /* LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItem.swift; sourceTree = "<group>"; };
 		4C377F04604CD5A0C12A108E /* NotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduler.swift; sourceTree = "<group>"; };
 		51BCB696054BAC914B74E9D6 /* PomodoroLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomodoroLiveActivity.swift; sourceTree = "<group>"; };
+		55939192A0BDED7D6877CD3C /* MirrorReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorReceiver.swift; sourceTree = "<group>"; };
+		587A68DDC4E3D1EC6BE96A17 /* APNsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APNsClient.swift; sourceTree = "<group>"; };
 		59CB213528DF3F898CB462CB /* Theme+Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Theme+Tokens.swift"; sourceTree = "<group>"; };
 		5F1023918467E96E9E5C9D2B /* ActivityWatchSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityWatchSource.swift; sourceTree = "<group>"; };
 		60D8FFA0F648285E3203E445 /* PopupAlertService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopupAlertService.swift; sourceTree = "<group>"; };
@@ -175,6 +181,7 @@
 				C18100ED932421423088B74D /* Resources */,
 				B8162A8784ABD4260C9FCCD5 /* Views */,
 				F2D55BA8A1FE45355532B29E /* LiveActivityController.swift */,
+				55939192A0BDED7D6877CD3C /* MirrorReceiver.swift */,
 				4C377F04604CD5A0C12A108E /* NotificationScheduler.swift */,
 				6388597E536C6DBAD7B22932 /* PomodoroController.swift */,
 				EF7797EEF6B9A44F6EF128E2 /* SessionSnapshot.swift */,
@@ -221,9 +228,11 @@
 				7163CA06BC3FEC39EEE14464 /* Resources */,
 				E93F0299A9525663AFB5745A /* Views */,
 				5F1023918467E96E9E5C9D2B /* ActivityWatchSource.swift */,
+				587A68DDC4E3D1EC6BE96A17 /* APNsClient.swift */,
 				97C7F119A88710E7396C2079 /* AppController.swift */,
 				CE7850DC3A0A37254A638DF6 /* HoverPanel.swift */,
 				4C049227522F4D68AAC66230 /* LoginItem.swift */,
+				390CA56B331CD69D996D425C /* MirrorPusher.swift */,
 				60D8FFA0F648285E3203E445 /* PopupAlertService.swift */,
 				B0A7444134F52FD87A2E276C /* SoundServices.swift */,
 				A961169B2743C9280ED7C0A9 /* StatusItemPresenter.swift */,
@@ -437,12 +446,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				12D7C7C6107FAF45CF1D4D90 /* APNsClient.swift in Sources */,
 				1574F21B2449C264DD23AFCC /* ActivityWatchSource.swift in Sources */,
 				E50F9128777A94BE48643F8B /* AppController.swift in Sources */,
 				96E2D9956AC3EA0944CD23EB /* FocusTabView.swift in Sources */,
 				9B7E068A6A6CCA2454CCD9C9 /* HoverPanel.swift in Sources */,
 				959DF4861435B6DAC14653FB /* IntervalsTabView.swift in Sources */,
 				5598E4FE12DEB1C895D654AB /* LoginItem.swift in Sources */,
+				364F8916A4FD796D6ADE7A3E /* MirrorPusher.swift in Sources */,
 				4C7EE66DAC1E6D6CE9C84DBD /* PopoverRootView.swift in Sources */,
 				1F52B03F4B54300342178CB1 /* PopupAlertService.swift in Sources */,
 				94DD93CBAD0043F62BE70BE5 /* SettingsTabView.swift in Sources */,
@@ -460,6 +471,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9CE6BF065848E6DD3B946995 /* LiveActivityController.swift in Sources */,
+				6B4AD63AA7E23EEE5A852B62 /* MirrorReceiver.swift in Sources */,
 				015E6BFCA0365AF23446B71A /* NotificationScheduler.swift in Sources */,
 				1E4BA4061D4BE7C0F6C63D02 /* PomodoroActivityAttributes.swift in Sources */,
 				377470944C69CFDAF34AD6F4 /* PomodoroController.swift in Sources */,
@@ -503,7 +515,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = Sources/TechPomodoroLiveActivity/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -536,7 +548,7 @@
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -567,7 +579,7 @@
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -627,9 +639,9 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.14;
+				MARKETING_VERSION = 1.0.15;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -669,7 +681,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = Sources/TechPomodoroLiveActivity/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -737,9 +749,9 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.14;
+				MARKETING_VERSION = 1.0.15;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

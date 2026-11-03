@@ -77,6 +77,9 @@ final class AppController: ObservableObject {
     private var cloudSync: CloudSync?
     private var syncStatusSubscription: AnyCancellable?
 
+    /// Pushes this Mac's timer to the iPhone's Live Activity.
+    let mirror = MirrorPusher()
+
     init(
         dateProvider: DateProvider = .system,
         calendar: Calendar = .current,
@@ -176,6 +179,23 @@ final class AppController: ObservableObject {
             self?.syncStatus = status
         }
         sync.setEnabled(state.settings.cloudSyncEnabled)
+
+        mirror.onForceRepush = { [weak self] in
+            guard let self else { return }
+            self.mirror.stateDidChange(self.state, at: self.dateProvider.now())
+        }
+        mirror.setEnabled(state.settings.mirrorEnabled, state: state, at: dateProvider.now())
+    }
+
+    /// On quit, tells the iPhone this Mac's timer has stopped. Bounded, so quitting never hangs.
+    func shutdownMirror() async {
+        let now = dateProvider.now()
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.mirror.shutdown(at: now) }
+            group.addTask { try? await Task.sleep(for: .seconds(4)) }
+            await group.next()
+            group.cancelAll()
+        }
     }
 
     /// Something another device changed, already written to the local stores by `CloudSync`.
@@ -210,6 +230,7 @@ final class AppController: ObservableObject {
         persist(records: records, at: now)
         pollFocusIfDue(at: now)
         refreshPresentation()
+        mirror.stateDidChange(state, at: now)
     }
 
     func update(settings newSettings: PomodoroSettings) {
@@ -219,6 +240,9 @@ final class AppController: ObservableObject {
         send(.settingsChanged(newSettings))
         if old.cloudSyncEnabled != newSettings.cloudSyncEnabled {
             cloudSync?.setEnabled(newSettings.cloudSyncEnabled)
+        }
+        if old.mirrorEnabled != newSettings.mirrorEnabled {
+            mirror.setEnabled(newSettings.mirrorEnabled, state: state, at: dateProvider.now())
         }
     }
 

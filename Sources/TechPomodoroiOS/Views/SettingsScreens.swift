@@ -151,6 +151,14 @@ struct SettingsScreen: View {
             }
 
             Section {
+                Toggle("Show Mac timer", isOn: controller.bind(\.mirrorEnabled))
+            } header: {
+                Text("Mac timer")
+            } footer: {
+                Text("While a timer runs on your Mac, the Lock Screen and this app show it instead of the iPhone's own, display only. Turn on Mirror timer to iPhone on the Mac too.")
+            }
+
+            Section {
                 HStack {
                     Text("tech-pomodoro")
                     Spacer()

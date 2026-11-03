@@ -83,6 +83,10 @@ struct SettingsTabView: View {
 
             Divider().overlay(Color.tpRule)
 
+            MirrorSettingsSection(controller: controller, mirror: controller.mirror)
+
+            Divider().overlay(Color.tpRule)
+
             HStack {
                 Text("Export history").foregroundStyle(Color.tpDimmed)
                 Spacer()
@@ -121,5 +125,61 @@ struct SettingsTabView: View {
                 }
             }
         )
+    }
+}
+
+/// Mirroring to the iPhone: the per-device switch, the push status, and the APNs key. The key is
+/// imported once from the .p8 file into the Keychain; nothing about it is ever written to the app's files.
+private struct MirrorSettingsSection: View {
+    @ObservedObject var controller: AppController
+    @ObservedObject var mirror: MirrorPusher
+    @State private var keyID = ""
+    @State private var teamID = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle("Mirror timer to iPhone", isOn: controller.bind(\.mirrorEnabled))
+                .toggleStyle(.switch)
+            Text(mirror.status.label)
+                .font(.caption2)
+                .foregroundStyle(mirror.status.isProblem ? Color.tpWarning : Color.tpDimmed)
+
+            HStack {
+                Text("APNs key").foregroundStyle(Color.tpDimmed)
+                Spacer()
+                Button(mirror.credentials == nil ? "Import .p8…" : "Replace…") { mirror.importKey() }
+                if mirror.credentials != nil {
+                    Button("Remove") { mirror.removeKey() }
+                }
+            }
+
+            if mirror.credentials != nil {
+                HStack {
+                    Text("Key ID").foregroundStyle(Color.tpDimmed)
+                    Spacer()
+                    TextField("10 characters", text: $keyID)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 120)
+                        .font(.system(size: 12, design: .monospaced))
+                        .onSubmit { mirror.update(keyID: keyID) }
+                }
+                HStack {
+                    Text("Team ID").foregroundStyle(Color.tpDimmed)
+                    Spacer()
+                    TextField("10 characters", text: $teamID)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 120)
+                        .font(.system(size: 12, design: .monospaced))
+                        .onSubmit { mirror.update(teamID: teamID) }
+                }
+            }
+        }
+        .onAppear(perform: load)
+        .onChange(of: mirror.credentials) { _, _ in load() }
+    }
+
+    private func load() {
+        keyID = mirror.credentials?.keyID ?? ""
+        teamID = mirror.credentials?.teamID ?? ""
     }
 }

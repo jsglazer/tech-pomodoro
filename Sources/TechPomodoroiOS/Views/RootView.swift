@@ -7,7 +7,7 @@ struct RootView: View {
     @ObservedObject var controller: PomodoroController
 
     var body: some View {
-        // `.tabItem` rather than iOS 18's `Tab`, to keep the iOS 17 floor.
+        // `.tabItem` rather than iOS 18's `Tab`: same look, and nothing gained by switching.
         TabView {
             TimerScreen(controller: controller)
                 .tabItem { Label("Timer", systemImage: "timer") }

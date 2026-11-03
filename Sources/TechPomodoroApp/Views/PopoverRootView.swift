@@ -132,9 +132,11 @@ private struct CountdownHeader: View {
                 }
 
                 // Middle slot: always the pause control.
+                // Pause in yellow, Resume in green, so the button says which way it goes.
                 ControlButton(
                     title: state.activity == .paused ? "Resume" : "Pause",
-                    enabled: state.activity != .idle
+                    enabled: state.activity != .idle,
+                    tint: state.activity == .paused ? .tpSuccess : .tpWarning
                 ) {
                     controller.send(.toggleRunning)
                 }
@@ -160,12 +162,15 @@ private struct CountdownHeader: View {
 private struct ControlButton: View {
     let title: String
     let enabled: Bool
+    /// Nil keeps the popover's own text colour.
+    var tint: Color? = nil
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(tint ?? Color.tpPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(RoundedRectangle(cornerRadius: 6).stroke(Color.tpRule, lineWidth: 1))

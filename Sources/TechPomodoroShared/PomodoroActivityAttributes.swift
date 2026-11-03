@@ -4,7 +4,17 @@ import Foundation
 /// The Live Activity's data, compiled into both the iOS app (which starts and updates the activity)
 /// and the widget extension (which draws it). Deliberately free of `TechPomodoroCore` types: the app
 /// flattens the state into plain values here, so the extension never links the core.
+///
+/// The same JSON shape is what a Mac pushes (`MirrorContent` in the core): renaming a field here
+/// breaks mirroring unless it is renamed there too.
 struct PomodoroActivityAttributes: ActivityAttributes {
+
+    /// `"mac"` on an activity a Mac started by push to mirror its timer; nil on the iPhone's own. The
+    /// app never updates or ends a mirrored activity as if it were its own, and its buttons are hidden
+    /// because they could not control the Mac.
+    var mirrorSource: String?
+
+    var isMirror: Bool { mirrorSource != nil }
 
     struct ContentState: Codable, Hashable, Sendable {
         /// "Work", "Rest", "Long Break", "Session Rest".
@@ -23,6 +33,8 @@ struct PomodoroActivityAttributes: ActivityAttributes {
         var upcoming: [UpcomingPhase]
         /// `#RRGGBB` accent for this phase: the rest colour during rest phases when enabled, else cyan.
         var tintHex: String
+        /// The Mac being mirrored; nil for the iPhone's own timer.
+        var mirroredFrom: String?
     }
 
     struct UpcomingPhase: Codable, Hashable, Sendable {

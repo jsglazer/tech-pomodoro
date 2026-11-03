@@ -17,11 +17,12 @@ struct TechPomodoroWidgets: WidgetBundle {
 struct PomodoroLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: PomodoroActivityAttributes.self) { context in
-            LockScreenView(state: context.state, isStale: context.isStale)
+            LockScreenView(state: context.state, isStale: context.isStale, isMirror: context.attributes.isMirror)
                 .activityBackgroundTint(Color.tpBackground)
                 .activitySystemActionForegroundColor(Color.tpPrimary)
         } dynamicIsland: { context in
             let state = context.state
+            let isMirror = context.attributes.isMirror
             let tint = Color(hexString: state.tintHex)
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -42,12 +43,16 @@ struct PomodoroLiveActivity: Widget {
                                 .font(.caption)
                                 .foregroundStyle(Color.tpDimmed)
                             Spacer()
-                            ActivityButtons(isPaused: state.isPaused)
+                            if isMirror {
+                                MirrorLabel(state: state)
+                            } else {
+                                ActivityButtons(isPaused: state.isPaused)
+                            }
                         }
                     }
                 }
             } compactLeading: {
-                Image(systemName: state.isPaused ? "pause.circle" : "timer")
+                Image(systemName: isMirror ? "laptopcomputer" : (state.isPaused ? "pause.circle" : "timer"))
                     .foregroundStyle(tint)
             } compactTrailing: {
                 CountdownText(state: state)
@@ -55,7 +60,7 @@ struct PomodoroLiveActivity: Widget {
                     .frame(maxWidth: 52)
                     .foregroundStyle(state.isPaused ? Color.tpAlert : tint)
             } minimal: {
-                Image(systemName: state.isPaused ? "pause.circle" : "timer")
+                Image(systemName: isMirror ? "laptopcomputer" : (state.isPaused ? "pause.circle" : "timer"))
                     .foregroundStyle(tint)
             }
             .keylineTint(tint)
@@ -66,6 +71,7 @@ struct PomodoroLiveActivity: Widget {
 private struct LockScreenView: View {
     let state: PomodoroActivityAttributes.ContentState
     let isStale: Bool
+    let isMirror: Bool
 
     var body: some View {
         let tint = Color(hexString: state.tintHex)
@@ -94,7 +100,11 @@ private struct LockScreenView: View {
                     .foregroundStyle(Color.tpDimmed)
                     .lineLimit(1)
                 Spacer()
-                ActivityButtons(isPaused: state.isPaused)
+                if isMirror {
+                    MirrorLabel(state: state)
+                } else {
+                    ActivityButtons(isPaused: state.isPaused)
+                }
             }
         }
         .padding(16)
@@ -107,7 +117,7 @@ private struct LockScreenView: View {
             return Text(state.isPaused ? "Paused" : "Last phase of the session")
         }
         if isStale {
-            return Text("Now \(next.title) — open to refresh")
+            return Text(isMirror ? "Now \(next.title) — waiting for the Mac" : "Now \(next.title) — open to refresh")
         }
         let rest = state.upcoming.map { "\($0.title) \($0.startsAt.formatted(date: .omitted, time: .shortened))" }
         return Text("Then " + rest.joined(separator: " · "))
@@ -149,6 +159,18 @@ private struct PhaseProgress: View {
             }
         }
         .tint(tint)
+    }
+}
+
+/// In place of the buttons on a mirrored activity: display only, the controls are on the Mac.
+private struct MirrorLabel: View {
+    let state: PomodoroActivityAttributes.ContentState
+
+    var body: some View {
+        Label(state.mirroredFrom ?? "Mac", systemImage: "laptopcomputer")
+            .font(.caption)
+            .foregroundStyle(Color.tpDimmed)
+            .lineLimit(1)
     }
 }
 

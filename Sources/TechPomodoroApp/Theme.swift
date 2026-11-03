@@ -13,6 +13,8 @@ enum Theme {
     static let warning = hex(0xFACC15)
     static let alert = hex(0xEF4444)
     static let rule = hex(0x164E63)
+    /// Green for Resume — the go colour, the same as the default rest colour.
+    static let success = hex(0x22C55E)
 
     static func color(_ token: ColorToken) -> NSColor {
         switch token {
@@ -66,4 +68,5 @@ extension Color {
     static let tpWarning = Theme.swiftUIColor(.warning)
     static let tpAlert = Theme.swiftUIColor(.alert)
     static let tpRule = Theme.swiftUIColor(.rule)
+    static let tpSuccess = Color(nsColor: Theme.success)
 }

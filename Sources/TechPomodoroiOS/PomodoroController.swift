@@ -29,6 +29,8 @@ final class PomodoroController: ObservableObject {
     @Published private(set) var notificationAuthorization: NotificationScheduler.Authorization = .notDetermined
     /// The iCloud sync row in Settings.
     @Published private(set) var syncStatus: CloudSyncStatus = .off
+    /// The Mac timer shown in place of this iPhone's own while one is active (display only).
+    @Published private(set) var mirror: MirrorContent?
 
     let soundCatalog: BundledSoundCatalog
 
@@ -53,6 +55,11 @@ final class PomodoroController: ObservableObject {
     /// `init`, so a Live Activity intent's background launch never spins up CloudKit.
     private var cloudSync: CloudSync?
     private var syncStatusSubscription: AnyCancellable?
+
+    /// The Mac's timer, mirrored. Started in `init` — unlike sync — because a push-to-start token can
+    /// arrive in a background launch and must still reach the Macs.
+    private let mirrorReceiver = MirrorReceiver()
+    private var mirrorSubscription: AnyCancellable?
 
     init(
         dateProvider: DateProvider = .system,
@@ -89,6 +96,14 @@ final class PomodoroController: ObservableObject {
             reloadHistory()
         }
         scheduleDidChange(at: now)
+
+        mirrorSubscription = mirrorReceiver.$displayed.sink { [weak self] content in
+            guard let self, content != self.mirror else { return }
+            self.mirror = content
+            // The Mac wins: this iPhone's own Live Activity steps aside, and comes back when it goes idle.
+            self.liveActivity.sync(with: self.state, at: self.dateProvider.now(), suppressed: content != nil)
+        }
+        mirrorReceiver.setEnabled(settings.mirrorEnabled)
     }
 
     static func live() -> PomodoroController {
@@ -122,6 +137,7 @@ final class PomodoroController: ObservableObject {
         } else {
             cloudSync?.fetchNow()
         }
+        mirrorReceiver.sceneDidBecomeActive()
         send(.tick)
         startRefreshing()
         scheduleDidChange(at: dateProvider.now())
@@ -133,12 +149,16 @@ final class PomodoroController: ObservableObject {
         refreshTimer?.invalidate()
         refreshTimer = nil
         snapshotStore?.save(state)
+        mirrorReceiver.sceneDidEnterBackground()
     }
 
     private func startRefreshing() {
         refreshTimer?.invalidate()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.send(.tick) }
+            MainActor.assumeIsolated {
+                self?.send(.tick)
+                self?.mirrorReceiver.tick()
+            }
         }
         // A tick that lands a fraction of a second late costs nothing — the countdown is derived from
         // `phaseEndsAt`, never accumulated — so allow the system to coalesce the wakeup.
@@ -173,6 +193,9 @@ final class PomodoroController: ObservableObject {
         send(.settingsChanged(newSettings))
         if old.cloudSyncEnabled != newSettings.cloudSyncEnabled {
             cloudSync?.setEnabled(newSettings.cloudSyncEnabled)
+        }
+        if old.mirrorEnabled != newSettings.mirrorEnabled {
+            mirrorReceiver.setEnabled(newSettings.mirrorEnabled)
         }
     }
 
@@ -265,7 +288,7 @@ final class PomodoroController: ObservableObject {
     private func scheduleDidChange(at now: Date) {
         snapshotStore?.save(state)
         scheduler.replan(for: state)
-        liveActivity.sync(with: state, at: now)
+        liveActivity.sync(with: state, at: now, suppressed: mirror != nil)
     }
 
     private func requestNotificationAuthorization() async {

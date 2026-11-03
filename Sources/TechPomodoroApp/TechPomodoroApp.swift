@@ -94,6 +94,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         return popover
     }
 
+    /// Gives the iPhone mirror a moment to say this Mac's timer has stopped.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let controller else { return .terminateNow }
+        Task { @MainActor in
+            await controller.shutdownMirror()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func popoverDidClose(_ notification: Notification) {
         controller?.setPopoverVisible(false)
         // Drop the hosting controller with the popover: this is what actually releases the view graph.

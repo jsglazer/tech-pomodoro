@@ -51,6 +51,7 @@ public enum SyncMerge {
         merged.soundName = local.soundName
         merged.launchAtLogin = local.launchAtLogin
         merged.cloudSyncEnabled = local.cloudSyncEnabled
+        merged.mirrorEnabled = local.mirrorEnabled
         merged.focus.enabled = local.focus.enabled
         merged.focus.serverURL = local.focus.serverURL
         return merged

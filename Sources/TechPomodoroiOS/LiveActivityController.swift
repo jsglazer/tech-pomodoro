@@ -6,8 +6,8 @@ import TechPomodoroCore
 /// menu bar item — in step with the timer.
 ///
 /// The countdown inside it is `Text(timerInterval:)`, which the system renders with no help from the
-/// app. What it cannot do is cross a boundary on its own: a suspended app cannot update it, and a
-/// push-driven update needs an APNs sender this app does not have. So the content also lists the next
+/// app. What it cannot do is cross a boundary on its own: a suspended app cannot update it, and only a
+/// Mac pushes Live Activity updates (to its own mirrored activity, never this one). So the content also lists the next
 /// few boundaries, and `staleDate` marks it out of date at the end of the current phase rather than
 /// letting it show a finished countdown as if it were current. It snaps back to exact on the next
 /// foreground, on any of its own buttons (their intents run in the app), or on tapping a notification.
@@ -26,10 +26,13 @@ final class LiveActivityController {
 
     /// Brings the activity in line with `state`: starts one for a timer that has none, updates it,
     /// or ends it when the timer is idle. Adopts an activity left over from before a relaunch.
-    func sync(with state: PomodoroState, at now: Date) {
+    ///
+    /// `suppressed` while a Mac timer is mirrored: the Mac wins, so this iPhone's own activity steps
+    /// aside and comes back when the Mac goes idle. Activities a Mac started are never touched here.
+    func sync(with state: PomodoroState, at now: Date, suppressed: Bool = false) {
         if activity == nil {
             // Keep the first surviving activity, end any extras from an earlier crash.
-            let existing = Activity<PomodoroActivityAttributes>.activities
+            let existing = Activity<PomodoroActivityAttributes>.activities.filter { !$0.attributes.isMirror }
             activity = existing.first
             for extra in existing.dropFirst() {
                 // `Activity` is not marked `Sendable`, though ActivityKit documents driving it from
@@ -39,12 +42,13 @@ final class LiveActivityController {
             }
         }
 
-        guard state.activity != .idle else {
+        guard state.activity != .idle, !suppressed,
+              let content = MirrorContentBuilder.content(for: state, at: now, primaryHex: Theme.primaryHex)
+                  .map(PomodoroActivityAttributes.ContentState.init) else {
             end()
             return
         }
 
-        let content = Self.content(for: state, at: now)
         guard content != lastContent || activity == nil else { return }
         lastContent = content
         let staleDate = state.activity == .running ? state.phaseEndsAt : nil
@@ -81,35 +85,5 @@ final class LiveActivityController {
     /// Returns once every queued update has reached the system.
     func settle() async {
         await work?.value
-    }
-
-    /// Flattens the core state into the plain values the extension draws.
-    static func content(for state: PomodoroState, at now: Date) -> PomodoroActivityAttributes.ContentState {
-        let settings = state.settings
-        let isPaused = state.activity == .paused
-        let remaining = state.remaining(at: now)
-        // Paused, the end is where it would land if resumed this instant, so the bar holds its place.
-        let end = isPaused ? now.addingTimeInterval(remaining) : (state.phaseEndsAt ?? now)
-        // Measured back from the end rather than read from `phaseStartedAt`, which a pause does not
-        // move: after a resume the bar must still span exactly one phase length.
-        let start = end.addingTimeInterval(-state.phaseDuration)
-        let upcoming = BoundaryPlanner.upcoming(from: state, now: now, limit: 3)
-            .compactMap { boundary in
-                boundary.nextPhase.map {
-                    PomodoroActivityAttributes.UpcomingPhase(title: $0.title, startsAt: boundary.fireAt)
-                }
-            }
-        let tint = settings.useRestColor && state.phase != .work ? settings.restColorHex : Theme.primaryHex
-
-        return PomodoroActivityAttributes.ContentState(
-            phaseTitle: state.phase.title,
-            isPaused: isPaused,
-            phaseStartedAt: start,
-            phaseEndsAt: end,
-            pausedRemaining: isPaused ? remaining : nil,
-            progressLine: "Rep \(state.currentRep) of \(settings.repsPerCycle) · Cycle \(state.currentCycle) of \(settings.cyclesPerSession)",
-            upcoming: upcoming,
-            tintHex: tint
-        )
     }
 }

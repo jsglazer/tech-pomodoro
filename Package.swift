@@ -1,6 +1,6 @@
 // swift-tools-version: 6.0
 // tech-pomodoro — a customizable menu-bar Pomodoro timer for macOS, with an iOS companion app.
-// Targeted toolchain: Swift 6.3.3 / macOS 26.5 SDK. Deployment targets: macOS 14, iOS 17.
+// Targeted toolchain: Swift 6.3.3 / macOS 26.5 SDK. Deployment targets: macOS 14, iOS 18.
 import PackageDescription
 
 let package = Package(
@@ -8,7 +8,7 @@ let package = Package(
     platforms: [
         .macOS(.v14),
         // The iOS app (project.yml) links only TechPomodoroCore; the AppKit shell below is never built for iOS.
-        .iOS(.v17)
+        .iOS(.v18)
     ],
     products: [
         // Platform-agnostic domain logic. The whole headless test suite runs against this.

@@ -13,6 +13,8 @@ enum Theme {
     static let warning = hex(0xFACC15)
     static let alert = hex(0xEF4444)
     static let rule = hex(0x164E63)
+    /// Green for Resume — the go colour, the same as the default rest colour.
+    static let success = hex(0x22C55E)
 
     /// `#22D3EE`, the primary cyan, for anything that carries a colour as a string.
     static let primaryHex = "#22D3EE"
@@ -51,6 +53,7 @@ extension Color {
     static let tpWarning = Color(uiColor: Theme.warning)
     static let tpAlert = Color(uiColor: Theme.alert)
     static let tpRule = Color(uiColor: Theme.rule)
+    static let tpSuccess = Color(uiColor: Theme.success)
 
     init(hexString: String) {
         self.init(uiColor: Theme.color(hexString: hexString))
