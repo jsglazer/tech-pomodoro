@@ -287,3 +287,39 @@ struct MirrorTests {
         #expect(decoded.workMinutes == 30)
     }
 }
+
+@Suite("Mirror correction of a missed push")
+struct MirrorCorrectionTests {
+    let t0 = Date(timeIntervalSinceReferenceDate: 800_000_000)
+
+    func content(endsIn minutes: Double, from start: Date) -> MirrorContent {
+        MirrorContent(phaseTitle: "Work", isPaused: false, phaseStartedAt: start, phaseEndsAt: start.addingTimeInterval(minutes * 60), pausedRemaining: nil, progressLine: "Rep 1 of 3", upcoming: [], tintHex: "#22D3EE", mirroredFrom: "Mac")
+    }
+
+    func timer(_ c: MirrorContent?, changedAt: Date) -> MirrorTimer {
+        MirrorTimer(deviceID: "mac-a", name: "Mac", activity: c == nil ? .idle : .running, changedAt: changedAt, content: c)
+    }
+
+    @Test func newerCloudTimerUpdatesTheActivity() {
+        let stale = content(endsIn: 25, from: t0)
+        let fresh = content(endsIn: 25, from: t0.addingTimeInterval(120))
+        let fix = MirrorArbiter.correction(activityContent: stale, receivedAt: t0, timers: [timer(fresh, changedAt: t0.addingTimeInterval(120))], now: t0.addingTimeInterval(200))
+        #expect(fix == .update(fresh))
+    }
+
+    @Test func olderCloudTimerLeavesAPushedActivityAlone() {
+        let pushed = content(endsIn: 25, from: t0.addingTimeInterval(120))
+        let old = content(endsIn: 25, from: t0)
+        #expect(MirrorArbiter.correction(activityContent: pushed, receivedAt: t0.addingTimeInterval(121), timers: [timer(old, changedAt: t0)], now: t0.addingTimeInterval(130)) == nil)
+    }
+
+    @Test func matchingContentNeedsNothing() {
+        let c = content(endsIn: 25, from: t0)
+        #expect(MirrorArbiter.correction(activityContent: c, receivedAt: t0.addingTimeInterval(-5), timers: [timer(c, changedAt: t0)], now: t0.addingTimeInterval(10)) == nil)
+    }
+
+    @Test func macWentIdleAfterTheActivityEndsIt() {
+        let c = content(endsIn: 25, from: t0)
+        #expect(MirrorArbiter.correction(activityContent: c, receivedAt: t0, timers: [timer(nil, changedAt: t0.addingTimeInterval(60))], now: t0.addingTimeInterval(70)) == .end)
+    }
+}

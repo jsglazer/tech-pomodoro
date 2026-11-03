@@ -302,6 +302,21 @@ public enum MirrorArbiter {
         content.mirroredFrom = winner.name
         return content
     }
+
+    public enum Correction: Equatable, Sendable {
+        case update(MirrorContent)
+        case end
+    }
+
+    /// What the iPhone app should do to a mirrored activity that may have missed a push. Every Mac
+    /// writes its timer to CloudKit before it pushes, so a Mac change recorded after the activity last
+    /// heard anything is one the push for it never delivered (failed, or dropped by the system's
+    /// update budget). Nil when the activity is already right, or CloudKit has nothing newer.
+    public static func correction(activityContent: MirrorContent, receivedAt: Date, timers: [MirrorTimer], now: Date) -> Correction? {
+        guard let latest = timers.map(\.changedAt).max(), latest > receivedAt else { return nil }
+        guard let shown = displayed(timers, now: now) else { return .end }
+        return shown == activityContent ? nil : .update(shown)
+    }
 }
 
 // MARK: - What to push

@@ -36,6 +36,8 @@ final class MirrorReceiver: ObservableObject {
     private var watched: [String: [Task<Void, Never>]] = [:]
     /// Content of the mirrored activity on screen, by activity id.
     private var activityContent: [String: MirrorContent] = [:]
+    /// When each mirrored activity's content last changed, to tell a missed push from a stale read.
+    private var activityReceivedAt: [String: Date] = [:]
     private var cloudTimers: [MirrorTimer] = []
     /// This environment's broadcast channel as last read from CloudKit.
     private var channelID: String?
@@ -109,7 +111,31 @@ final class MirrorReceiver: ObservableObject {
             cloudTimers = snapshot.timers
             channelID = snapshot.channels[environment]?.channelID
             recompute()
+            correctMissedPushes()
             restartMirrorIfMissing()
+        }
+    }
+
+    /// Brings an up mirrored activity in line with the Mac when CloudKit shows a change its push
+    /// never delivered. Only runs while the app is open, but that is also when someone is looking.
+    private func correctMissedPushes() {
+        guard enabled else { return }
+        let now = Date()
+        for activity in Activity<PomodoroActivityAttributes>.activities where activity.attributes.isMirror {
+            let id = activity.id
+            guard let current = activityContent[id], let receivedAt = activityReceivedAt[id],
+                  let fix = MirrorArbiter.correction(activityContent: current, receivedAt: receivedAt, timers: cloudTimers, now: now) else { continue }
+            nonisolated(unsafe) let activity = activity
+            switch fix {
+            case .update(let content):
+                NSLog("tech-pomodoro: mirrored activity missed a push; correcting from CloudKit")
+                activityContentChanged(id: id, content)
+                let staleDate = content.isPaused ? nil : content.phaseEndsAt.addingTimeInterval(90)
+                Task { await activity.update(ActivityContent(state: .init(content), staleDate: staleDate)) }
+            case .end:
+                NSLog("tech-pomodoro: mirrored activity missed the Mac's stop; ending it")
+                Task { await activity.end(nil, dismissalPolicy: .immediate) }
+            }
         }
     }
 
@@ -194,6 +220,9 @@ final class MirrorReceiver: ObservableObject {
         guard watched[id] == nil else { return }
         nonisolated(unsafe) let activity = activity
         activityContent[id] = MirrorContent(activity.content.state)
+        // Unknown how old this content is (the app may have been closed when it arrived), so any
+        // Mac change in CloudKit that disagrees with it wins.
+        activityReceivedAt[id] = .distantPast
         recompute()
         let contentTask = Task { [weak self] in
             for await content in activity.contentUpdates {
@@ -215,6 +244,7 @@ final class MirrorReceiver: ObservableObject {
         for other in Activity<PomodoroActivityAttributes>.activities where other.attributes.isMirror && other.id != id {
             nonisolated(unsafe) let other = other
             activityContent[other.id] = nil
+            activityReceivedAt[other.id] = nil
             watched[other.id]?.forEach { $0.cancel() }
             watched[other.id] = nil
             Task { await other.end(nil, dismissalPolicy: .immediate) }
@@ -223,12 +253,14 @@ final class MirrorReceiver: ObservableObject {
 
     private func activityContentChanged(id: String, _ content: MirrorContent) {
         activityContent[id] = content
+        activityReceivedAt[id] = Date()
         recompute()
     }
 
     /// Ended by the Mac or swiped away here: either way nothing is on screen for this iPhone now.
     private func activityEnded(id: String) {
         activityContent[id] = nil
+        activityReceivedAt[id] = nil
         watched[id]?.forEach { $0.cancel() }
         watched[id] = nil
         mirrorEndedAt = Date()

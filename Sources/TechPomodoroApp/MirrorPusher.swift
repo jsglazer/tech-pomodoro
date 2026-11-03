@@ -58,6 +58,11 @@ final class MirrorPusher: ObservableObject {
     /// The newest timer not yet pushed; a run in flight picks it up when it finishes.
     private var pending: MirrorTimer?
     private var worker: Task<Void, Never>?
+    /// The newest timer handed to a run, retried after a failure so the iPhone can't stay behind
+    /// until the next change (which may be most of a phase away).
+    private var latest: MirrorTimer?
+    private var retryTask: Task<Void, Never>?
+    private var retryDelay: TimeInterval = 15
 
     init(defaults: UserDefaults = .standard) {
         if let id = defaults.string(forKey: "mirror.deviceID") {
@@ -116,6 +121,9 @@ final class MirrorPusher: ObservableObject {
 
     private func enqueue(_ timer: MirrorTimer) {
         pending = timer
+        latest = timer
+        retryTask?.cancel()
+        retryTask = nil
         guard worker == nil else { return }
         worker = Task { [weak self] in
             while let self, let next = self.pending {
@@ -153,8 +161,25 @@ final class MirrorPusher: ObservableObject {
                 pushed = try await push(desired: desired, environment: environment, snapshot: snapshot, credentials: credentials, now: now) || pushed
             }
             finish(pushed ? .pushed(Date()) : (status.isPushed ? status : .ready))
+            retryDelay = 15
         } catch {
+            NSLog("tech-pomodoro: mirror push failed: \(Self.describe(error))")
             finish(.error(Self.describe(error)))
+            scheduleRetry(of: own)
+        }
+    }
+
+    /// Tries the same timer again, backing off from 15 s to 2 min, unless something newer has been
+    /// queued by then. The content holds absolute dates, so a late push still shows the right time.
+    private func scheduleRetry(of timer: MirrorTimer) {
+        guard enabled || timer.activity == .idle else { return }
+        let delay = retryDelay
+        retryDelay = min(retryDelay * 2, 120)
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self, self.latest == timer, self.pending == nil else { return }
+            self.enqueue(timer)
         }
     }
 
