@@ -328,7 +328,7 @@ private struct ControlButton: View {
     let title: String
     let systemImage: String
     let enabled: Bool
-    /// Fills the button with this colour (dark text on top); nil keeps the plain outlined button.
+    /// Fills the button with this colour (white text on top); nil keeps the plain outlined button.
     var fill: Color? = nil
     let action: () -> Void
 
@@ -348,7 +348,7 @@ private struct ControlButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(fill == nil ? Color.tpPrimary : Color.black)
+        .foregroundStyle(fill == nil ? Color.tpPrimary : Color.white)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
     }
