@@ -37,6 +37,9 @@ final class MirrorReceiver: ObservableObject {
     /// Content of the mirrored activity on screen, by activity id.
     private var activityContent: [String: MirrorContent] = [:]
     private var cloudTimers: [MirrorTimer] = []
+    /// This environment's broadcast channel as last read from CloudKit.
+    private var channelID: String?
+    private var foreground = false
     private var pollTimer: Timer?
 
     init(defaults: UserDefaults = .standard) {
@@ -76,6 +79,7 @@ final class MirrorReceiver: ObservableObject {
     // MARK: - Foreground
 
     func sceneDidBecomeActive() {
+        foreground = true
         guard enabled else { return }
         refreshFromCloud()
         pollTimer?.invalidate()
@@ -88,6 +92,7 @@ final class MirrorReceiver: ObservableObject {
     }
 
     func sceneDidEnterBackground() {
+        foreground = false
         pollTimer?.invalidate()
         pollTimer = nil
     }
@@ -102,7 +107,34 @@ final class MirrorReceiver: ObservableObject {
         Task {
             guard let snapshot = try? await store.fetchAll() else { return }
             cloudTimers = snapshot.timers
+            channelID = snapshot.channels[environment]?.channelID
             recompute()
+            restartMirrorIfMissing()
+        }
+    }
+
+    /// A Mac timer is active but no mirrored activity is up: it was swiped away, closed from the Mac's
+    /// menu bar, or its push-to-start never arrived. The Mac only starts a new one on its next change
+    /// (pause, skip, phase boundary), which can be most of a phase away. While the app is open it can
+    /// start the activity itself, subscribed to the same broadcast channel so the Mac's later pushes
+    /// still reach it. Clearing `mirrorEndedAt` tells the Macs not to push-to-start a second one.
+    private func restartMirrorIfMissing() {
+        guard enabled, foreground, let channelID,
+              ActivityAuthorizationInfo().areActivitiesEnabled,
+              !Activity<PomodoroActivityAttributes>.activities.contains(where: { $0.attributes.isMirror }),
+              let content = MirrorArbiter.displayed(cloudTimers, now: Date()) else { return }
+        let staleDate = content.isPaused ? nil : content.phaseEndsAt.addingTimeInterval(90)
+        do {
+            let activity = try Activity.request(
+                attributes: PomodoroActivityAttributes(mirrorSource: "mac"),
+                content: ActivityContent(state: .init(content), staleDate: staleDate),
+                pushType: .channel(channelID)
+            )
+            watch(activity)
+            mirrorEndedAt = nil
+            publishPhone()
+        } catch {
+            NSLog("tech-pomodoro: could not restart the mirrored activity: \(error.localizedDescription)")
         }
     }
 
@@ -130,6 +162,7 @@ final class MirrorReceiver: ObservableObject {
         activityTask = Task { [weak self] in
             for await activity in Activity<PomodoroActivityAttributes>.activityUpdates where activity.attributes.isMirror {
                 nonisolated(unsafe) let activity = activity
+                self?.endOtherMirrors(keeping: activity.id)
                 self?.watch(activity)
             }
         }
@@ -174,6 +207,18 @@ final class MirrorReceiver: ObservableObject {
             }
         }
         watched[id] = [contentTask, stateTask]
+    }
+
+    /// Only one mirrored activity at a time: the newest stays, so a Mac start that crosses with one the
+    /// app started itself doesn't leave two on the Lock Screen.
+    private func endOtherMirrors(keeping id: String) {
+        for other in Activity<PomodoroActivityAttributes>.activities where other.attributes.isMirror && other.id != id {
+            nonisolated(unsafe) let other = other
+            activityContent[other.id] = nil
+            watched[other.id]?.forEach { $0.cancel() }
+            watched[other.id] = nil
+            Task { await other.end(nil, dismissalPolicy: .immediate) }
+        }
     }
 
     private func activityContentChanged(id: String, _ content: MirrorContent) {

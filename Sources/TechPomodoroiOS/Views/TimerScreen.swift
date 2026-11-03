@@ -83,12 +83,12 @@ private struct TimerPanel: View {
                         confirmingStop = true
                     }
                 }
-                // Pause in yellow, Resume in green, so the button says which way it goes.
+                // Pause filled yellow, Resume filled green, so the button says which way it goes.
                 ControlButton(
                     title: state.activity == .paused ? "Resume" : "Pause",
                     systemImage: state.activity == .paused ? "play.fill" : "pause.fill",
                     enabled: state.activity != .idle,
-                    tint: state.activity == .paused ? .tpSuccess : .tpWarning
+                    fill: state.activity == .paused ? .tpSuccess : .tpWarning
                 ) {
                     controller.send(.toggleRunning)
                 }
@@ -328,7 +328,8 @@ private struct ControlButton: View {
     let title: String
     let systemImage: String
     let enabled: Bool
-    var tint: Color = .tpPrimary
+    /// Fills the button with this colour (dark text on top); nil keeps the plain outlined button.
+    var fill: Color? = nil
     let action: () -> Void
 
     var body: some View {
@@ -337,11 +338,17 @@ private struct ControlButton: View {
                 .font(.system(size: 15, weight: .medium))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 10).stroke(Color.tpRule, lineWidth: 1))
+                .background {
+                    if let fill {
+                        RoundedRectangle(cornerRadius: 10).fill(fill)
+                    } else {
+                        RoundedRectangle(cornerRadius: 10).stroke(Color.tpRule, lineWidth: 1)
+                    }
+                }
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(tint)
+        .foregroundStyle(fill == nil ? Color.tpPrimary : Color.black)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
     }
