@@ -51,7 +51,7 @@ except Exception:
     devices = []
 for d in devices:
     hw, conn = d.get("hardwareProperties", {}), d.get("connectionProperties", {})
-    if (hw.get("reality") == "physical" and hw.get("deviceType") == "iPhone"
+    if (hw.get("reality") != "simulated" and hw.get("deviceType") == "iPhone"
             and conn.get("pairingState") == "paired" and conn.get("transportType")):
         print(f'{hw.get("udid")}\t{d.get("deviceProperties", {}).get("name", "?")}')
 EOF
