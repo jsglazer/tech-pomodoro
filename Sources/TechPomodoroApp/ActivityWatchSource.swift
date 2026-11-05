@@ -22,6 +22,7 @@ final class ActivityWatchSource {
         let window: String
         let afk: String?
         let notes: String?
+        let documents: String?
     }
 
     /// How far before the interval to look for the note that was already open when it began.
@@ -52,7 +53,14 @@ final class ActivityWatchSource {
             if let bucket = buckets.afk {
                 away = try ActivityWatchParser.away(try await events(server, bucket, start, until))
             }
-            return FocusActivity(windows: windows, notes: notes, away: away)
+            var documents: [DocumentSpan] = []
+            if let bucket = buckets.documents {
+                // Merged events can start well before the interval, like notes.
+                documents = try ActivityWatchParser.documents(
+                    try await events(server, bucket, start.addingTimeInterval(-Self.noteLookback), until)
+                )
+            }
+            return FocusActivity(windows: windows, notes: notes, away: away, documents: documents)
         } catch {
             // A deleted or recreated bucket must be found again on the next poll.
             buckets = nil
@@ -70,7 +78,9 @@ final class ActivityWatchSource {
         let resolved = Buckets(
             window: window,
             afk: ids.first { $0.hasPrefix("aw-watcher-afk") },
-            notes: ids.first { $0.hasPrefix("aw-watcher-obsidian_") }
+            notes: ids.first { $0.hasPrefix("aw-watcher-obsidian_") },
+            // This Mac's own sensor bucket (synced copies from other Macs carry a `-synced-from` suffix).
+            documents: ids.first { $0.hasPrefix(DocumentHeartbeat.bucketPrefix) && !$0.contains("-synced-from") }
         )
         buckets = resolved
         cachedServer = server

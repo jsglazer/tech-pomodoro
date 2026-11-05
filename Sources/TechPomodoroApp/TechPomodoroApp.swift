@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         controller.startRefreshing()
         controller.observeWorkspace()
         controller.startSync()
+        controller.startDocumentSensor()
     }
 
     @objc private func togglePopover() {

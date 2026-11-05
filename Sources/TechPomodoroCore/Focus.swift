@@ -137,17 +137,20 @@ public struct FocusActivity: Sendable, Equatable {
     public var windows: [WindowSpan]
     public var notes: [NoteSpan]
     public var away: [AwaySpan]
+    /// The front app's open documents, from TechPomodoro's own document sensor.
+    public var documents: [DocumentSpan]
 
-    public init(windows: [WindowSpan] = [], notes: [NoteSpan] = [], away: [AwaySpan] = []) {
+    public init(windows: [WindowSpan] = [], notes: [NoteSpan] = [], away: [AwaySpan] = [], documents: [DocumentSpan] = []) {
         self.windows = windows
         self.notes = notes
         self.away = away
+        self.documents = documents
     }
 }
 
 /// What a moment of activity counts as.
 public enum FocusCategory: Sendable, Equatable, Hashable {
-    /// Obsidian, on a note in this project.
+    /// Obsidian on a note in this project, or a watched app showing a document in this project.
     case project(FocusProject)
     /// An on-task app, an allowed site, or a PDF: counts toward the anchor, whatever it is.
     case support(String)
@@ -172,10 +175,17 @@ public enum FocusClassifier {
     public static func category(
         window: WindowSpan,
         note: NoteSpan?,
+        documents: [String] = [],
         settings: FocusSettings
     ) -> FocusCategory {
         let app = window.app
         if contains(settings.neutralApps, app) { return .neutral }
+        // A watched app showing a document inside a project folder counts toward that project; a
+        // document outside every rule falls through to the on-task / PDF rules below, as before.
+        if let path = FocusRules.document(for: window, among: documents),
+           let project = FocusRules.project(forDocument: path, settings: settings) {
+            return .project(project)
+        }
         if app.caseInsensitiveCompare("Obsidian") == .orderedSame {
             // Obsidian focused with no note reported yet: nothing to judge it by.
             guard let note else { return .neutral }
@@ -395,12 +405,15 @@ public enum FocusTracker {
         for w in windows { edges.insert(w.start); edges.insert(w.end) }
         for n in notes { edges.insert(n.start) }
         for a in activity.away { edges.insert(a.start); edges.insert(a.end) }
+        for d in activity.documents { edges.insert(d.start) }
         let cuts = edges.filter { $0 >= start && $0 <= now }.sorted()
 
         var runs: [FocusRun] = []
         for (a, b) in zip(cuts, cuts.dropFirst()) where b > a {
             let mid = a.addingTimeInterval(b.timeIntervalSince(a) / 2)
-            let category = self.category(at: mid, windows: windows, notes: notes, away: activity.away, settings: settings)
+            let category = self.category(
+                at: mid, windows: windows, notes: notes, away: activity.away, documents: activity.documents, settings: settings
+            )
             if let previous = runs.last, previous.category == category {
                 runs[runs.count - 1] = FocusRun(category: category, start: previous.start, end: b)
             } else {
@@ -415,6 +428,7 @@ public enum FocusTracker {
         windows: [WindowSpan],
         notes: [NoteSpan],
         away: [AwaySpan],
+        documents: [DocumentSpan] = [],
         settings: FocusSettings
     ) -> FocusCategory {
         if away.contains(where: { $0.start <= t && t < $0.end }) { return .neutral }
@@ -422,7 +436,13 @@ public enum FocusTracker {
         // The note open at `t` is the newest one reported by then: the plugin goes quiet while you
         // read without typing, but the note is still the one on screen.
         let note = notes.last { $0.start <= t }
-        return FocusClassifier.category(window: window, note: note, settings: settings)
+        // The documents the sensor saw for this app around `t` (its event is extended each sample,
+        // so allow the live tolerance past its end, as for windows).
+        let docs = documents.last {
+            $0.app.caseInsensitiveCompare(window.app) == .orderedSame
+                && $0.start <= t && t < $0.end.addingTimeInterval(liveTolerance)
+        }?.paths ?? []
+        return FocusClassifier.category(window: window, note: note, documents: docs, settings: settings)
     }
 
     /// Sorts the window spans, closes polling-jitter gaps, and holds the newest span open to `now`.
@@ -584,6 +604,23 @@ public enum ActivityWatchParser {
         try events(data).compactMap { e in
             guard let file = e.data["file"]?.string else { return nil }
             return NoteSpan(start: e.start, end: e.end, file: file)
+        }
+    }
+
+    /// Events from the documents bucket (`app`, `bundle_id`, `count`, `paths`).
+    public static func documents(_ data: Data) throws -> [DocumentSpan] {
+        struct DocEvent: Decodable {
+            struct Payload: Decodable {
+                let app: String?
+                let paths: [String]?
+            }
+            let timestamp: String
+            let duration: Double
+            let data: Payload
+        }
+        return try JSONDecoder().decode([DocEvent].self, from: data).compactMap { e in
+            guard let start = date(e.timestamp), let app = e.data.app else { return nil }
+            return DocumentSpan(start: start, end: start.addingTimeInterval(max(0, e.duration)), app: app, paths: e.data.paths ?? [])
         }
     }
 

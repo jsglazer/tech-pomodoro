@@ -23,6 +23,7 @@
 		3812ECEBD1F0EF3B1F1E8F1B /* TechPomodoroCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4A50958B477135E0CF03A5E0 /* TechPomodoroCore */; };
 		3AA8591C8256EF51CFC7E1D4 /* Bell.caf in Resources */ = {isa = PBXBuildFile; fileRef = FCB41D4B50EB3AB65BED6F54 /* Bell.caf */; };
 		3BF3C6C9EF1B8017473DBAD8 /* Glass.caf in Resources */ = {isa = PBXBuildFile; fileRef = 72E95E7F7B0B68B10D580AEF /* Glass.caf */; };
+		40CE97E1184F2890F0B827D7 /* DocumentSensorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1266593F1C67BDDB7939A409 /* DocumentSensorService.swift */; };
 		4C7EE66DAC1E6D6CE9C84DBD /* PopoverRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6119F5ADBE518A650444CD76 /* PopoverRootView.swift */; };
 		4D1299A69F3F30D99190B258 /* PomodoroLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51BCB696054BAC914B74E9D6 /* PomodoroLiveActivity.swift */; };
 		5598E4FE12DEB1C895D654AB /* LoginItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C049227522F4D68AAC66230 /* LoginItem.swift */; };
@@ -87,6 +88,7 @@
 		0E753CDA458F71AA57C1C273 /* TimerTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerTabView.swift; sourceTree = "<group>"; };
 		0FF9AA65A9F428B3CA7D408F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		114743B784961E638E5972B8 /* PomodoroActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomodoroActivityAttributes.swift; sourceTree = "<group>"; };
+		1266593F1C67BDDB7939A409 /* DocumentSensorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentSensorService.swift; sourceTree = "<group>"; };
 		156FED9A39ECBA6679CEAE07 /* TechPomodoroiOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TechPomodoroiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		166A7FDEB4F35A5B93C4F54F /* SoundTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundTabView.swift; sourceTree = "<group>"; };
 		19C931490756CA6ACA333AD4 /* SettingsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTabView.swift; sourceTree = "<group>"; };
@@ -230,6 +232,7 @@
 				5F1023918467E96E9E5C9D2B /* ActivityWatchSource.swift */,
 				587A68DDC4E3D1EC6BE96A17 /* APNsClient.swift */,
 				97C7F119A88710E7396C2079 /* AppController.swift */,
+				1266593F1C67BDDB7939A409 /* DocumentSensorService.swift */,
 				CE7850DC3A0A37254A638DF6 /* HoverPanel.swift */,
 				4C049227522F4D68AAC66230 /* LoginItem.swift */,
 				390CA56B331CD69D996D425C /* MirrorPusher.swift */,
@@ -449,6 +452,7 @@
 				12D7C7C6107FAF45CF1D4D90 /* APNsClient.swift in Sources */,
 				1574F21B2449C264DD23AFCC /* ActivityWatchSource.swift in Sources */,
 				E50F9128777A94BE48643F8B /* AppController.swift in Sources */,
+				40CE97E1184F2890F0B827D7 /* DocumentSensorService.swift in Sources */,
 				96E2D9956AC3EA0944CD23EB /* FocusTabView.swift in Sources */,
 				9B7E068A6A6CCA2454CCD9C9 /* HoverPanel.swift in Sources */,
 				959DF4861435B6DAC14653FB /* IntervalsTabView.swift in Sources */,
@@ -643,7 +647,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.18;
+				MARKETING_VERSION = 1.0.19;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -753,7 +757,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.18;
+				MARKETING_VERSION = 1.0.19;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

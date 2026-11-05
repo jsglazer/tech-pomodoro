@@ -24,6 +24,8 @@ final class AppController: ObservableObject {
     @Published private(set) var focusStatus: String = "Waiting for Work"
     /// The summary line of the Work interval that ended last.
     @Published private(set) var lastFocusLine: String?
+    /// The document sensor's status line for the Focus tab.
+    @Published private(set) var documentSensorStatus: DocumentSensorEngine.Status = .waiting
 
     /// Republished once a second purely so SwiftUI re-renders the countdown.
     ///
@@ -80,6 +82,9 @@ final class AppController: ObservableObject {
     /// Pushes this Mac's timer to the iPhone's Live Activity.
     let mirror = MirrorPusher()
 
+    /// Reports the front app's open documents to ActivityWatch; independent of the timer.
+    private var documentSensor: DocumentSensorService?
+
     init(
         dateProvider: DateProvider = .system,
         calendar: Calendar = .current,
@@ -122,6 +127,18 @@ final class AppController: ObservableObject {
     func attach(presenter: StatusItemPresenter) {
         self.presenter = presenter
         refreshPresentation()
+    }
+
+    /// Starts the document sensor for the life of the app. It never consults the timer state, so it
+    /// samples while the timer is idle, paused, in Work or in Rest alike.
+    func startDocumentSensor() {
+        guard documentSensor == nil else { return }
+        let sensor = DocumentSensorService(
+            settings: { [weak self] in self?.state.settings.focus ?? FocusSettings() },
+            onStatus: { [weak self] status in self?.documentSensorStatus = status }
+        )
+        documentSensor = sensor
+        sensor.start()
     }
 
     func startRefreshing() {
@@ -243,6 +260,54 @@ final class AppController: ObservableObject {
         }
         if old.mirrorEnabled != newSettings.mirrorEnabled {
             mirror.setEnabled(newSettings.mirrorEnabled, state: state, at: dateProvider.now())
+        }
+        if old.focus.documents != newSettings.focus.documents || old.focus.serverURL != newSettings.focus.serverURL {
+            documentSensor?.sampleNow()
+        }
+    }
+
+    /// Adds a running app to the document sensor's list (PDFs by default; edit the extensions after).
+    func addWatchedApp(_ app: NSRunningApplication) {
+        guard let bundleID = app.bundleIdentifier else { return }
+        var settings = state.settings
+        guard settings.focus.documents.app(bundleID: bundleID) == nil else { return }
+        settings.focus.documents.apps.append(
+            WatchedApp(name: app.localizedName ?? bundleID, bundleID: bundleID, extensions: ["pdf"])
+        )
+        update(settings: settings)
+    }
+
+    func removeWatchedApp(bundleID: String) {
+        var settings = state.settings
+        settings.focus.documents.apps.removeAll { $0.bundleID == bundleID }
+        update(settings: settings)
+    }
+
+    /// Comma-separated extensions of one watched app, as a text field binding.
+    func extensionsBinding(bundleID: String) -> Binding<String> {
+        Binding(
+            get: { self.state.settings.focus.documents.app(bundleID: bundleID)?.extensions.joined(separator: ", ") ?? "" },
+            set: { newValue in
+                var settings = self.state.settings
+                guard let i = settings.focus.documents.apps.firstIndex(where: { $0.bundleID == bundleID }) else { return }
+                settings.focus.documents.apps[i].extensions = newValue
+                    .split(whereSeparator: { $0 == "," || $0 == " " })
+                    .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: ". ")).lowercased() }
+                    .filter { !$0.isEmpty }
+                self.update(settings: settings)
+            }
+        )
+    }
+
+    /// `Last sent 4 s ago · PDF Expert · 1 file`, or why it is not sending.
+    var documentSensorStatusText: String {
+        switch documentSensorStatus {
+        case .off: return "Off"
+        case .waiting: return "Waiting for a watched app with a document open"
+        case .error(let message): return "Not sending — \(message)"
+        case .sent(let app, let files, let at):
+            let ago = max(0, Int(dateProvider.now().timeIntervalSince(at).rounded()))
+            return "Last sent \(ago) s ago · \(app) · \(files) \(files == 1 ? "file" : "files")"
         }
     }
 

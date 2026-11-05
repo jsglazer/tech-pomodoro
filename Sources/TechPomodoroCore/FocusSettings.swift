@@ -36,6 +36,9 @@ public struct FocusSettings: Codable, Sendable, Equatable {
     public var allowedSites: [String]
     /// App names that neither count nor drift: lock screen, auth prompts, this app.
     public var neutralApps: [String]
+    /// The document sensor: which apps' open documents are reported to ActivityWatch. Runs whether or
+    /// not the timer is, and its paths feed the folder rules above.
+    public var documents: DocumentSensorSettings
 
     public init(
         enabled: Bool = true,
@@ -48,7 +51,8 @@ public struct FocusSettings: Codable, Sendable, Equatable {
         taskRules: [String] = ["Classes/*/*/Assign/*", "Classes/*/*/*"],
         onTaskApps: [String] = ["Anki", "Zotero", "Preview", "Skim", "PDF Expert", "Adobe Acrobat", "Adobe Acrobat Reader"],
         allowedSites: [String] = ["library.gmu.edu", "schar.gmu.edu"],
-        neutralApps: [String] = ["TechPomodoro", "loginwindow", "UserNotificationCenter", "coreautha", "ScreenSaverEngine"]
+        neutralApps: [String] = ["TechPomodoro", "loginwindow", "UserNotificationCenter", "coreautha", "ScreenSaverEngine"],
+        documents: DocumentSensorSettings = DocumentSensorSettings()
     ) {
         self.enabled = enabled
         self.serverURL = serverURL
@@ -61,6 +65,7 @@ public struct FocusSettings: Codable, Sendable, Equatable {
         self.onTaskApps = onTaskApps
         self.allowedSites = allowedSites
         self.neutralApps = neutralApps
+        self.documents = documents
     }
 
     /// Tolerates a blob written before a key existed, like `PomodoroSettings` does.
@@ -81,7 +86,8 @@ public struct FocusSettings: Codable, Sendable, Equatable {
             taskRules: try value(.taskRules, d.taskRules),
             onTaskApps: try value(.onTaskApps, d.onTaskApps),
             allowedSites: try value(.allowedSites, d.allowedSites),
-            neutralApps: try value(.neutralApps, d.neutralApps)
+            neutralApps: try value(.neutralApps, d.neutralApps),
+            documents: try value(.documents, d.documents)
         )
     }
 }

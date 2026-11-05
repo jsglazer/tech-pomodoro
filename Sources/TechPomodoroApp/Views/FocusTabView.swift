@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TechPomodoroCore
 
@@ -160,8 +161,76 @@ struct FocusTabView: View {
             Text("PDFs always count as on task. Any other app or site is a distraction.")
                 .font(.caption2)
                 .foregroundStyle(Color.tpDimmed)
+
+            Divider().overlay(Color.tpRule)
+
+            documentSensing
         }
         .font(.system(size: 12))
+    }
+
+    /// The document sensor: which apps' open documents go to ActivityWatch. Runs whether or not the
+    /// timer is running.
+    private var documentSensing: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("Report open documents to ActivityWatch", isOn: controller.bind(\.focus.documents.enabled))
+                .toggleStyle(.switch)
+            stepper(
+                "Sample every",
+                controller.bind(\.focus.documents.intervalSeconds),
+                range: DocumentSensorSettings.intervalRange,
+                step: 5,
+                unit: "s"
+            )
+            Text(controller.documentSensorStatusText)
+                .font(.caption2)
+                .foregroundStyle(statusIsError ? Color.orange : Color.tpDimmed)
+                .lineLimit(2)
+
+            Text("Watched apps (extensions)").foregroundStyle(Color.tpDimmed)
+            ForEach(controller.settings.focus.documents.apps) { app in
+                HStack(spacing: 6) {
+                    Text(app.name)
+                        .lineLimit(1)
+                        .frame(width: 110, alignment: .leading)
+                        .help(app.bundleID)
+                    TextField("pdf, docx", text: controller.extensionsBinding(bundleID: app.bundleID))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11, design: .monospaced))
+                    Button {
+                        controller.removeWatchedApp(bundleID: app.bundleID)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Stop watching \(app.name)")
+                }
+            }
+            Menu("Add a running app") {
+                ForEach(addableApps, id: \.processIdentifier) { app in
+                    Button(app.localizedName ?? app.bundleIdentifier ?? "?") { controller.addWatchedApp(app) }
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            Text("When a watched app is in front, the full paths of its open documents of these types go to the aw-watcher-documents bucket, and Focus files them under your class and task folders. Paths stay in this Mac's ActivityWatch (aw-sync copies them to your other Macs).")
+                .font(.caption2)
+                .foregroundStyle(Color.tpDimmed)
+        }
+    }
+
+    private var statusIsError: Bool {
+        if case .error = controller.documentSensorStatus { return true }
+        return false
+    }
+
+    /// Regular (Dock) apps that are running and not watched yet.
+    private var addableApps: [NSRunningApplication] {
+        let watched = Set(controller.settings.focus.documents.apps.map { $0.bundleID.lowercased() })
+        return NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && $0.bundleIdentifier != nil }
+            .filter { !watched.contains(($0.bundleIdentifier ?? "").lowercased()) }
+            .sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
     }
 
     private func editor(_ title: String, _ keyPath: WritableKeyPath<PomodoroSettings, [String]>) -> some View {

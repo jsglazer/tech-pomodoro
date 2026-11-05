@@ -54,6 +54,7 @@ public enum SyncMerge {
         merged.mirrorEnabled = local.mirrorEnabled
         merged.focus.enabled = local.focus.enabled
         merged.focus.serverURL = local.focus.serverURL
+        merged.focus.documents.enabled = local.focus.documents.enabled
         return merged
     }
 
