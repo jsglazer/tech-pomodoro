@@ -299,3 +299,75 @@ struct DocumentFocusTests {
         #expect(merged.focus.documents.intervalSeconds == 30)
     }
 }
+
+@Suite("Focus: settings migrations")
+struct FocusMigrationTests {
+
+    @Test("Old settings gain the Mason Labs site once, keeping the user's own entries")
+    func addsSiteOnce() throws {
+        let old = try JSONDecoder().decode(FocusSettings.self, from: Data(#"{"allowedSites":["library.gmu.edu","canvas.gmu.edu","https://outlook.cloud.microsoft/"]}"#.utf8))
+        #expect(old.migrationLevel == 0)
+        let migrated = try #require(FocusMigrations.migrate(old))
+        #expect(migrated.allowedSites == ["library.gmu.edu", "canvas.gmu.edu", "https://outlook.cloud.microsoft/", "windows.cloud.microsoft"])
+        #expect(migrated.migrationLevel == FocusMigrations.latest)
+        #expect(FocusMigrations.migrate(migrated) == nil)
+    }
+
+    @Test("A site the user already has is not duplicated; fresh settings need no migration")
+    func idempotent() {
+        var s = FocusSettings(allowedSites: ["Windows.Cloud.Microsoft "], migrationLevel: 0)
+        s = FocusMigrations.migrate(s) ?? s
+        #expect(s.allowedSites == ["Windows.Cloud.Microsoft "])
+        #expect(FocusMigrations.migrate(FocusSettings()) == nil)
+        #expect(FocusSettings().allowedSites.contains("windows.cloud.microsoft"))
+    }
+
+    @Test("Mason Labs in Chrome counts as on task")
+    func masonLabsOnTask() {
+        let w = WindowSpan(start: Fixture.start, end: Fixture.start, app: "Google Chrome", title: "Mason Labs",
+                           url: "https://windows.cloud.microsoft/webclient/")
+        #expect(FocusClassifier.category(window: w, note: nil, settings: FocusSettings()) == .support("windows.cloud.microsoft"))
+    }
+}
+
+@Suite("Focus: paused time")
+struct FocusPauseTests {
+    let settings = FocusSettings()
+    let note = "/Classes/2026-B/RD - POGO 801/Inventory/Validity.md"
+
+    private func at(_ s: Double) -> Date { Fixture.start.plus(seconds: s) }
+
+    /// 0–400 s on an RD note (anchor locks at 300 s), then Safari from 400 s on.
+    private var activity: FocusActivity {
+        FocusActivity(
+            windows: [WindowSpan(start: at(0), end: at(400), app: "Obsidian", title: "Validity"),
+                      WindowSpan(start: at(400), end: at(1000), app: "Safari", title: "News", url: "https://apnews.com/")],
+            notes: [NoteSpan(start: at(0), end: at(400), file: note)]
+        )
+    }
+
+    @Test("Distraction time while paused is neutral and does not build a streak")
+    func pausedIsNeutral() {
+        // Paused 410–990 in Safari, resumed at 990: only 400–410 and 990–1000 count as off-anchor.
+        let snap = FocusTracker.snapshot(activity: activity, from: at(0), to: at(1000), settings: settings,
+                                         paused: [AwaySpan(start: at(410), end: at(990))])
+        #expect(snap.distractionSeconds == 20)
+        #expect(snap.neutralSeconds == 580)
+        #expect(snap.offAnchorSeconds == 20)
+        #expect(snap.offAnchorSeconds < TimeInterval(settings.driftAlertSeconds))
+    }
+
+    @Test("Without the pause the same activity is a long drift")
+    func unpausedDrifts() {
+        let snap = FocusTracker.snapshot(activity: activity, from: at(0), to: at(1000), settings: settings)
+        #expect(snap.offAnchorSeconds == 600)
+    }
+
+    @Test("A streak from before the pause is neither extended nor reset by it")
+    func streakAcrossPause() {
+        // Off from 400; paused 420–900; at 905 the streak is 20 + 5.
+        let snap = FocusTracker.snapshot(activity: activity, from: at(0), to: at(905), settings: settings,
+                                         paused: [AwaySpan(start: at(420), end: at(900))])
+        #expect(snap.offAnchorSeconds == 25)
+    }
+}

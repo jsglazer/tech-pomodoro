@@ -318,9 +318,14 @@ public enum FocusTracker {
         from start: Date,
         to now: Date,
         settings: FocusSettings,
-        manualAnchor: FocusProject? = nil
+        manualAnchor: FocusProject? = nil,
+        paused: [AwaySpan] = []
     ) -> FocusSnapshot {
         guard now > start else { return .empty }
+        // Time the timer spent paused is neutral, like away time: it counts neither way and does not
+        // extend an off-anchor streak, so resuming after a pause spent elsewhere never alerts.
+        var activity = activity
+        activity.away += paused
         let runs = self.runs(activity: activity, from: start, to: now, settings: settings)
         let level = settings.driftLevel
 

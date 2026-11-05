@@ -39,6 +39,9 @@ public struct FocusSettings: Codable, Sendable, Equatable {
     /// The document sensor: which apps' open documents are reported to ActivityWatch. Runs whether or
     /// not the timer is, and its paths feed the folder rules above.
     public var documents: DocumentSensorSettings
+    /// How many `FocusMigrations` have been applied to these settings. Fresh settings start at the
+    /// latest level; a blob written before migrations existed decodes as 0.
+    public var migrationLevel: Int
 
     public init(
         enabled: Bool = true,
@@ -50,9 +53,10 @@ public struct FocusSettings: Codable, Sendable, Equatable {
         areaRules: [String] = ["Classes/*/*"],
         taskRules: [String] = ["Classes/*/*/Assign/*", "Classes/*/*/*"],
         onTaskApps: [String] = ["Anki", "Zotero", "Preview", "Skim", "PDF Expert", "Adobe Acrobat", "Adobe Acrobat Reader"],
-        allowedSites: [String] = ["library.gmu.edu", "schar.gmu.edu"],
+        allowedSites: [String] = ["library.gmu.edu", "schar.gmu.edu", "windows.cloud.microsoft"],
         neutralApps: [String] = ["TechPomodoro", "loginwindow", "UserNotificationCenter", "coreautha", "ScreenSaverEngine"],
-        documents: DocumentSensorSettings = DocumentSensorSettings()
+        documents: DocumentSensorSettings = DocumentSensorSettings(),
+        migrationLevel: Int = FocusMigrations.latest
     ) {
         self.enabled = enabled
         self.serverURL = serverURL
@@ -66,6 +70,7 @@ public struct FocusSettings: Codable, Sendable, Equatable {
         self.allowedSites = allowedSites
         self.neutralApps = neutralApps
         self.documents = documents
+        self.migrationLevel = migrationLevel
     }
 
     /// Tolerates a blob written before a key existed, like `PomodoroSettings` does.
@@ -87,7 +92,32 @@ public struct FocusSettings: Codable, Sendable, Equatable {
             onTaskApps: try value(.onTaskApps, d.onTaskApps),
             allowedSites: try value(.allowedSites, d.allowedSites),
             neutralApps: try value(.neutralApps, d.neutralApps),
-            documents: try value(.documents, d.documents)
+            documents: try value(.documents, d.documents),
+            // Missing means "written before migrations existed": every migration still applies.
+            migrationLevel: try value(.migrationLevel, 0)
         )
+    }
+}
+
+/// One-time changes to settings people already have, applied in order and recorded in
+/// `FocusSettings.migrationLevel` so each runs once. They only ever add; nothing the user set is
+/// removed or overwritten.
+public enum FocusMigrations {
+    /// 1 — `windows.cloud.microsoft` (GMU's Mason Labs virtual desktop, used for Data - POGO 511)
+    ///     counts as an on-task site.
+    public static let latest = 1
+
+    /// The migrated settings, or nil when they are already up to date.
+    public static func migrate(_ settings: FocusSettings) -> FocusSettings? {
+        guard settings.migrationLevel < latest else { return nil }
+        var s = settings
+        if s.migrationLevel < 1 {
+            let site = "windows.cloud.microsoft"
+            if !s.allowedSites.contains(where: { $0.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(site) == .orderedSame }) {
+                s.allowedSites.append(site)
+            }
+        }
+        s.migrationLevel = latest
+        return s
     }
 }

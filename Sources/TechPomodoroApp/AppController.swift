@@ -67,6 +67,10 @@ final class AppController: ObservableObject {
     /// each stretch alerts once.
     private var driftAlerted = false
     private var lastFocusPoll: Date = .distantPast
+    /// Pauses within the tracked Work interval, closed, plus the one in progress. Paused time is
+    /// neutral for focus.
+    private var pausedSpans: [AwaySpan] = []
+    private var pauseStartedAt: Date?
     private var focusPollInFlight = false
     /// Seconds between ActivityWatch polls during Work.
     private static let focusPollSeconds: TimeInterval = 5
@@ -202,6 +206,16 @@ final class AppController: ObservableObject {
             self.mirror.stateDidChange(self.state, at: self.dateProvider.now())
         }
         mirror.setEnabled(state.settings.mirrorEnabled, state: state, at: dateProvider.now())
+        applyMigrations()
+    }
+
+    /// Applies any pending one-time settings migration as an ordinary edit, so it is saved and
+    /// synced to the other devices like a change made in Settings.
+    private func applyMigrations() {
+        guard let migrated = FocusMigrations.migrate(state.settings.focus) else { return }
+        var settings = state.settings
+        settings.focus = migrated
+        update(settings: settings)
     }
 
     /// On quit, tells the iPhone this Mac's timer has stopped. Bounded, so quitting never hangs.
@@ -225,6 +239,8 @@ final class AppController: ObservableObject {
             // Straight to the reducer: routing through `update(settings:)` would stamp it as a local
             // edit and push it straight back.
             send(.settingsChanged(settings))
+            // A copy from a device that has not migrated yet gets migrated here (and pushed once).
+            applyMigrations()
         }
     }
 
@@ -238,7 +254,9 @@ final class AppController: ObservableObject {
         let now = dateProvider.now()
         self.now = now
         if isPopoverVisible { displayNow = now }
+        let previousActivity = state.activity
         state = PomodoroReducer.reduce(state, event, now)
+        notePause(from: previousActivity, to: state.activity, at: now)
         // The record of a Work interval that just ended takes its focus summary before tracking moves
         // on to whatever phase began, and before a boundary popup wants to quote it.
         let records = attachFocus(to: state.pendingRecords)
@@ -496,11 +514,29 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// Records pause spans so focus can treat them as neutral.
+    private func notePause(from old: PomodoroState.Activity, to new: PomodoroState.Activity, at now: Date) {
+        if new == .paused, old != .paused {
+            pauseStartedAt = now
+        } else if old == .paused, new != .paused, let start = pauseStartedAt {
+            pausedSpans.append(AwaySpan(start: start, end: now))
+            pauseStartedAt = nil
+        }
+    }
+
+    /// The pauses of the tracked interval, the open one running to `now`.
+    private func pauses(at now: Date) -> [AwaySpan] {
+        guard let open = pauseStartedAt, now > open else { return pausedSpans }
+        return pausedSpans + [AwaySpan(start: open, end: now)]
+    }
+
     /// Starts tracking afresh whenever a new Work interval begins, and stops outside Work.
     private func trackFocusInterval() {
         let start = isTrackingFocus ? state.phaseStartedAt : nil
         guard start != focusIntervalStart else { return }
         focusIntervalStart = start
+        pausedSpans = []
+        if state.activity != .paused { pauseStartedAt = nil }
         focus = nil
         focusActivity = nil
         manualAnchor = nil
@@ -546,7 +582,8 @@ final class AppController: ObservableObject {
             from: start,
             to: dateProvider.now(),
             settings: settings.focus,
-            manualAnchor: manualAnchor
+            manualAnchor: manualAnchor,
+            paused: pauses(at: dateProvider.now())
         )
         focus = snapshot
         checkDrift(snapshot)

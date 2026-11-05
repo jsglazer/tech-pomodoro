@@ -275,7 +275,7 @@ struct FocusHistoryTests {
         #expect(decoded.focus == FocusSettings())
         let partial = try JSONDecoder().decode(FocusSettings.self, from: Data(#"{"driftAlertSeconds":60}"#.utf8))
         #expect(partial.driftAlertSeconds == 60)
-        #expect(partial.allowedSites == ["library.gmu.edu", "schar.gmu.edu"])
+        #expect(partial.allowedSites == ["library.gmu.edu", "schar.gmu.edu", "windows.cloud.microsoft"])
     }
 
     @Test("Project totals add up per task across the day's records")
