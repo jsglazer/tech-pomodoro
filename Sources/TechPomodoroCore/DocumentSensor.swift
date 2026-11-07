@@ -12,6 +12,9 @@ public struct WatchedApp: Codable, Sendable, Equatable, Hashable, Identifiable {
 
     public var id: String { bundleID }
 
+    /// True for a file manager whose current folder is reported instead of its open files (ForkLift).
+    public var reportsFolder: Bool { FolderPaths.isFolderApp(bundleID: bundleID) }
+
     public init(name: String, bundleID: String, extensions: [String]) {
         self.name = name
         self.bundleID = bundleID
@@ -39,8 +42,12 @@ public struct DocumentSensorSettings: Codable, Sendable, Equatable {
         WatchedApp(name: "Microsoft Excel", bundleID: "com.microsoft.Excel", extensions: ["xls", "xlsx", "csv"]),
         WatchedApp(name: "Pages", bundleID: "com.apple.Pages", extensions: ["pages"]),
         WatchedApp(name: "Numbers", bundleID: "com.apple.iWork.Numbers", extensions: ["numbers"]),
-        WatchedApp(name: "RStudio", bundleID: "com.rstudio.desktop", extensions: ["r", "rmd", "qmd", "rproj", "csv"])
+        WatchedApp(name: "RStudio", bundleID: "com.rstudio.desktop", extensions: ["r", "rmd", "qmd", "rproj", "csv"]),
+        DocumentSensorSettings.forkLift
     ]
+
+    /// ForkLift reports the folder in its active tab, not open files, so it has no extensions.
+    public static let forkLift = WatchedApp(name: "ForkLift", bundleID: FolderPaths.forkLiftBundleID, extensions: [])
 
     public init(enabled: Bool = true, intervalSeconds: Int = 15, apps: [WatchedApp] = DocumentSensorSettings.defaultApps) {
         self.enabled = enabled
@@ -100,6 +107,34 @@ public enum DocumentPaths {
         let name = path.split(separator: "/").last.map(String.init) ?? path
         guard let dot = name.lastIndex(of: "."), dot != name.startIndex else { return name }
         return String(name[..<dot])
+    }
+}
+
+/// File managers that report the folder they show rather than files they hold open.
+public enum FolderPaths {
+
+    public static let forkLiftBundleID = "com.binarynights.ForkLift"
+
+    public static func isFolderApp(bundleID: String?) -> Bool {
+        bundleID?.caseInsensitiveCompare(forkLiftBundleID) == .orderedSame
+    }
+
+    /// The AppleScript that asks ForkLift for its active tab's folder, as a URL.
+    public static let forkLiftScript = #"""
+        with timeout of 3 seconds
+            tell application id "com.binarynights.ForkLift" to get displayedUrl of activeTab of front window
+        end timeout
+        """#
+
+    /// The absolute folder path in a `file://` URL, always ending in `/`:
+    /// `file:///a/RD%20-%20POGO%20801/` → `/a/RD - POGO 801/`. Nil for anything that isn't a local
+    /// folder URL (sftp, smb, search results, an empty answer).
+    public static func path(fromDisplayedURL text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), url.isFileURL else { return nil }
+        let path = url.path(percentEncoded: false)
+        guard path.hasPrefix("/") else { return nil }
+        return path.hasSuffix("/") ? path : path + "/"
     }
 }
 
@@ -300,8 +335,11 @@ extension FocusRules {
     /// The project of a document at an absolute path, by the same folder rules as notes, matched on
     /// the path from whichever folder an area rule starts at (`…/Dropbox/_Schar/Classes/2026-B/…` and
     /// the vault's `Classes/2026-B/…` land on the same project). Nil when no area rule matches.
+    /// A folder (a path ending in `/`, as ForkLift reports it) counts as a file inside that folder, so a
+    /// class folder itself matches the class: `.` stands in for the file name.
     public static func project(forDocument path: String, settings: FocusSettings) -> FocusProject? {
-        let segments = path.split(separator: "/").map(String.init)
+        var segments = path.split(separator: "/").map(String.init)
+        if path.hasSuffix("/") { segments.append(".") }
         for i in segments.indices {
             let tail = Array(segments[i...])
             if firstMatch(settings.areaRules, tail) != nil {
@@ -312,7 +350,8 @@ extension FocusRules {
     }
 
     /// The document shown in `window`, from the documents reported for that app at that moment:
-    /// the one whose file name the window title starts with, or the only one.
+    /// the one whose file name the window title starts with, or the only one. A folder path's name is
+    /// its last folder (`/a/Data/` → `Data`).
     public static func document(for window: WindowSpan, among paths: [String]) -> String? {
         guard !paths.isEmpty else { return nil }
         let title = window.title.lowercased()

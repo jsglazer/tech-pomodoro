@@ -3,6 +3,35 @@ import Darwin
 import Foundation
 import TechPomodoroCore
 
+/// ForkLift's current folder (its front window's active tab), through its AppleScript interface. Runs
+/// `osascript` rather than NSAppleScript so a slow answer — or the one-time Automation prompt —
+/// never blocks the main thread. Nil when ForkLift refuses, times out or shows a non-local folder.
+enum ForkLiftFolder {
+
+    static func current() -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", FolderPaths.forkLiftScript]
+        let out = Pipe(), err = Pipe()
+        process.standardOutput = out
+        process.standardError = err
+        do { try process.run() } catch { return nil }
+        let deadline = Date().addingTimeInterval(5)
+        while process.isRunning && Date() < deadline { usleep(50_000) }
+        if process.isRunning {
+            process.terminate()
+            return nil
+        }
+        let text = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        guard process.terminationStatus == 0 else {
+            let message = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            NSLog("tech-pomodoro: ForkLift folder unavailable: \(message.trimmingCharacters(in: .whitespacesAndNewlines))")
+            return nil
+        }
+        return FolderPaths.path(fromDisplayedURL: text)
+    }
+}
+
 /// Lists the files a process (and its descendants) has open, through `libproc` — the same data
 /// `lsof` shows, without a shell-out and without any permission prompt. Only processes of the same
 /// user are readable, which is all the sensor needs.
@@ -69,9 +98,12 @@ struct LiveDocumentSensorPort: DocumentSensorPort {
             return (app.processIdentifier, app.bundleIdentifier, app.localizedName)
         }
         guard let (pid, bundleID, name) = front, let watched = settings.app(bundleID: bundleID) else { return nil }
-        // libproc walks every process: keep it off the main thread.
-        let paths = await Task.detached(priority: .utility) {
-            DocumentPaths.documents(in: OpenFiles.paths(rootPID: pid), extensions: watched.extensions)
+        // libproc walks every process, and osascript waits on ForkLift: keep both off the main thread.
+        let paths = await Task.detached(priority: .utility) { () -> [String] in
+            if watched.reportsFolder {
+                return ForkLiftFolder.current().map { [$0] } ?? []
+            }
+            return DocumentPaths.documents(in: OpenFiles.paths(rootPID: pid), extensions: watched.extensions)
         }.value
         return DocumentReading(app: name ?? watched.name, bundleID: watched.bundleID, paths: paths)
     }

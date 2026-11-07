@@ -371,3 +371,72 @@ struct FocusPauseTests {
         #expect(snap.offAnchorSeconds == 25)
     }
 }
+
+@Suite("Document sensor: ForkLift folders")
+struct ForkLiftFolderTests {
+    let settings = FocusSettings()
+    let assignFolder = "/Users/josh/Library/CloudStorage/Dropbox/_Schar/Classes/2026-B/RD - POGO 801/Assign/Asgn03-TheoryHypotheses/Data/"
+    let classFolder = "/Users/josh/Library/CloudStorage/Dropbox/_Schar/Classes/2026-B/RD - POGO 801/"
+
+    @Test("Only local file URLs become folder paths, percent-decoded and ending in /")
+    func parsesURL() {
+        #expect(FolderPaths.path(fromDisplayedURL: "file:///Users/josh/Library/CloudStorage/Dropbox/_Schar/Classes/2026-B/RD%20-%20POGO%20801/Assign/Asgn03-TheoryHypotheses/Data/\n") == assignFolder)
+        #expect(FolderPaths.path(fromDisplayedURL: "file:///Users/josh/Downloads") == "/Users/josh/Downloads/")
+        #expect(FolderPaths.path(fromDisplayedURL: "file:///") == "/")
+        #expect(FolderPaths.path(fromDisplayedURL: "sftp://host/home/josh/") == nil)
+        #expect(FolderPaths.path(fromDisplayedURL: "") == nil)
+        #expect(FolderPaths.path(fromDisplayedURL: "missing value") == nil)
+    }
+
+    @Test("A class folder, and any folder inside it, maps to the class; others map to nothing")
+    func folderProjects() {
+        let root = FocusRules.project(forDocument: classFolder, settings: settings)
+        #expect(root == FocusProject(area: "Classes/2026-B/RD - POGO 801", task: "Classes/2026-B/RD - POGO 801"))
+        let sub = FocusRules.project(forDocument: assignFolder, settings: settings)
+        #expect(sub?.area == "Classes/2026-B/RD - POGO 801")
+        #expect(sub?.task == "Classes/2026-B/RD - POGO 801/Assign/Asgn03-TheoryHypotheses")
+        let exports = FocusRules.project(forDocument: "/Users/josh/VaultSchar/Classes/2026-B/Data - POGO 511/Exports/", settings: settings)
+        #expect(exports?.task == "Classes/2026-B/Data - POGO 511/Exports")
+        #expect(FocusRules.project(forDocument: "/Users/josh/Downloads/", settings: settings) == nil)
+        #expect(FocusRules.project(forDocument: "/Users/josh/VaultSchar/Classes/2026-B/", settings: settings) == nil)
+    }
+
+    @Test("Classifier: ForkLift on a class subfolder is on task; on Downloads it drifts")
+    func classifier() {
+        let w = WindowSpan(start: Fixture.start, end: Fixture.start, app: "ForkLift", title: "Data")
+        #expect(FocusClassifier.category(window: w, note: nil, documents: [assignFolder], settings: settings)
+                == .project(FocusProject(area: "Classes/2026-B/RD - POGO 801", task: "Classes/2026-B/RD - POGO 801/Assign/Asgn03-TheoryHypotheses")))
+        let d = WindowSpan(start: Fixture.start, end: Fixture.start, app: "ForkLift", title: "Downloads")
+        #expect(FocusClassifier.category(window: d, note: nil, documents: ["/Users/josh/Downloads/"], settings: settings) == .distraction("ForkLift"))
+        #expect(FocusClassifier.category(window: d, note: nil, documents: [], settings: settings) == .distraction("ForkLift"))
+        let q = WindowSpan(start: Fixture.start, end: Fixture.start, app: "ForkLift", title: "Quick Look")
+        #expect(FocusRules.document(for: q, among: [assignFolder]) == assignFolder)
+    }
+
+    @Test("ForkLift is watched by default and reports its folder, not files")
+    func defaults() {
+        let app = try? #require(DocumentSensorSettings().app(bundleID: "com.binarynights.forklift"))
+        #expect(app?.reportsFolder == true)
+        #expect(DocumentSensorSettings().watches(appName: "ForkLift"))
+        #expect(DocumentSensorSettings().app(bundleID: "com.readdle.PDFExpert-Mac")?.reportsFolder == false)
+    }
+
+    @Test("Old settings gain ForkLift once, after their own apps; an app already listed is kept as is")
+    func migration() throws {
+        let old = try JSONDecoder().decode(FocusSettings.self, from: Data(#"{"migrationLevel":1,"documents":{"apps":[{"name":"PDF Expert","bundleID":"com.readdle.PDFExpert-Mac","extensions":["pdf"]}]}}"#.utf8))
+        let migrated = try #require(FocusMigrations.migrate(old))
+        #expect(migrated.documents.apps.map(\.name) == ["PDF Expert", "ForkLift"])
+        #expect(migrated.migrationLevel == 2)
+        #expect(FocusMigrations.migrate(migrated) == nil)
+
+        var mine = FocusSettings(migrationLevel: 1)
+        mine.documents.apps = [WatchedApp(name: "My ForkLift", bundleID: "com.binarynights.ForkLift", extensions: [])]
+        let kept = try #require(FocusMigrations.migrate(mine))
+        #expect(kept.documents.apps.map(\.name) == ["My ForkLift"])
+
+        let ancient = try JSONDecoder().decode(FocusSettings.self, from: Data(#"{"allowedSites":["library.gmu.edu"]}"#.utf8))
+        let both = try #require(FocusMigrations.migrate(ancient))
+        #expect(both.allowedSites.contains("windows.cloud.microsoft"))
+        #expect(both.documents.app(bundleID: FolderPaths.forkLiftBundleID) != nil)
+    }
+}

@@ -194,9 +194,17 @@ struct FocusTabView: View {
                         .lineLimit(1)
                         .frame(width: 110, alignment: .leading)
                         .help(app.bundleID)
-                    TextField("pdf, docx", text: controller.extensionsBinding(bundleID: app.bundleID))
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 11, design: .monospaced))
+                    if app.reportsFolder {
+                        Text("current folder")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color.tpDimmed)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .help("Reports the folder in ForkLift's active tab. macOS asks once to allow this.")
+                    } else {
+                        TextField("pdf, docx", text: controller.extensionsBinding(bundleID: app.bundleID))
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11, design: .monospaced))
+                    }
                     Button {
                         controller.removeWatchedApp(bundleID: app.bundleID)
                     } label: {
@@ -213,7 +221,7 @@ struct FocusTabView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            Text("When a watched app is in front, the full paths of its open documents of these types go to the aw-watcher-documents bucket, and Focus files them under your class and task folders. Paths stay in this Mac's ActivityWatch (aw-sync copies them to your other Macs).")
+            Text("When a watched app is in front, the full paths of its open documents of these types (for ForkLift, the folder it shows) go to the aw-watcher-documents bucket, and Focus files them under your class and task folders. Paths stay in this Mac's ActivityWatch (aw-sync copies them to your other Macs).")
                 .font(.caption2)
                 .foregroundStyle(Color.tpDimmed)
         }

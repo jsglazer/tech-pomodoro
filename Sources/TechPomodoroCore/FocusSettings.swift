@@ -105,7 +105,8 @@ public struct FocusSettings: Codable, Sendable, Equatable {
 public enum FocusMigrations {
     /// 1 — `windows.cloud.microsoft` (GMU's Mason Labs virtual desktop, used for Data - POGO 511)
     ///     counts as an on-task site.
-    public static let latest = 1
+    /// 2 — ForkLift becomes a watched app of the document sensor, reporting its current folder.
+    public static let latest = 2
 
     /// The migrated settings, or nil when they are already up to date.
     public static func migrate(_ settings: FocusSettings) -> FocusSettings? {
@@ -116,6 +117,9 @@ public enum FocusMigrations {
             if !s.allowedSites.contains(where: { $0.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(site) == .orderedSame }) {
                 s.allowedSites.append(site)
             }
+        }
+        if s.migrationLevel < 2, s.documents.app(bundleID: FolderPaths.forkLiftBundleID) == nil {
+            s.documents.apps.append(DocumentSensorSettings.forkLift)
         }
         s.migrationLevel = latest
         return s
