@@ -105,8 +105,9 @@ struct PaperPanel: View {
     }
 }
 
-/// The last 14 days of paper sittings, with edit and delete, and Add sitting.
-struct PaperSittingsScreen: View {
+/// The Today tab: today's numbers, and the last 14 days of paper sittings with edit, delete and Add
+/// sitting. The longer windows are in Settings → Analytics.
+struct TodayScreen: View {
     @ObservedObject var controller: PomodoroController
     @State private var adding = false
     @State private var editing: PaperSittingView?
@@ -115,28 +116,53 @@ struct PaperSittingsScreen: View {
     var body: some View {
         let sittings = controller.recentPaperSittings
         Form {
-            if sittings.isEmpty {
-                Text("No paper sittings in the last 14 days. Tag a Work interval on the Timer screen, or add a past sitting.")
-                    .foregroundStyle(Color.tpDimmed)
-            }
-            ForEach(sittings) { sitting in
-                Button { editing = sitting } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(sitting.className) · \(sitting.kind.title) · \(PaperHistory.durationText(sitting.seconds))")
-                            .foregroundStyle(Color.tpPrimary)
-                        Text(Self.timeText(sitting) + (sitting.manual ? " · logged" : "") + (sitting.note.map { " · \($0)" } ?? ""))
-                            .font(.caption)
-                            .foregroundStyle(Color.tpDimmed)
+            Section("Today") {
+                AnalyticsRow(title: "Work", window: controller.analytics.today)
+                let paper = controller.paperToday
+                if paper.isEmpty {
+                    HStack {
+                        Text("Paper").foregroundStyle(Color.tpDimmed)
+                        Spacer()
+                        Text("—").foregroundStyle(Color.tpDimmed)
                     }
                 }
-                .swipeActions {
-                    Button("Delete", role: .destructive) { deleting = sitting }
+                ForEach(paper, id: \.className) { total in
+                    HStack {
+                        Text(total.className).foregroundStyle(Color.tpDimmed)
+                        Spacer()
+                        Text(PaperHistory.durationText(total.seconds))
+                            .font(.body.monospacedDigit())
+                    }
                 }
             }
+
+            Section {
+                if sittings.isEmpty {
+                    Text("No paper sittings in the last 14 days. Tag a Work interval on the Timer screen, or add a past sitting.")
+                        .foregroundStyle(Color.tpDimmed)
+                }
+                ForEach(sittings) { sitting in
+                    Button { editing = sitting } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(sitting.className) · \(sitting.kind.title) · \(PaperHistory.durationText(sitting.seconds))")
+                                .foregroundStyle(Color.tpPrimary)
+                            Text(Self.timeText(sitting) + (sitting.manual ? " · logged" : "") + (sitting.note.map { " · \($0)" } ?? ""))
+                                .font(.caption)
+                                .foregroundStyle(Color.tpDimmed)
+                        }
+                    }
+                    .swipeActions {
+                        Button("Delete", role: .destructive) { deleting = sitting }
+                    }
+                }
+            } header: {
+                Text("Paper sittings, last 14 days")
+            }
         }
+        .onAppear { controller.refreshAnalytics() }
         .scrollContentBackground(.hidden)
         .background(Color.tpBackground)
-        .navigationTitle("Paper sittings")
+        .navigationTitle("Today")
         .toolbar {
             Button { adding = true } label: { Label("Add sitting", systemImage: "plus") }
         }

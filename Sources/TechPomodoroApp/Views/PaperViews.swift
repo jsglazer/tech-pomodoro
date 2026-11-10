@@ -122,10 +122,6 @@ struct PaperTabView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let today = controller.paperTodayLine {
-                LabeledRow(label: "Today", value: today)
-            }
-
             DisclosureGroup("Log a past sitting", isExpanded: $adding) {
                 SittingForm(
                     classes: controller.settings.paperClasses,
@@ -178,7 +174,7 @@ struct PaperTabView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 300)
+                .frame(maxHeight: 240)
             }
         }
         .font(.system(size: 12))
@@ -358,9 +354,10 @@ struct PaperClassesEditor: View {
                     .buttonStyle(.borderless)
                     .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            Text("Use each class folder's name exactly (e.g. Data - POGO 511): the vault totals match paper time to classes by that name. Synced to your other devices.")
-                .font(.caption2)
-                .foregroundStyle(Color.tpDimmed)
+            InfoCaption(
+                "Use each class folder's name exactly, e.g. Data - POGO 511.",
+                detail: "The vault totals match paper time to classes by name. The list syncs to your other devices."
+            )
         }
     }
 
@@ -417,14 +414,12 @@ struct PaperPublishingSection: View {
             .disabled(!controller.settings.paperPublishEnabled)
             .opacity(controller.settings.paperPublishEnabled ? 1 : 0.4)
             if controller.settings.paperPublishEnabled {
-                Text(statusText)
-                    .font(.caption2)
-                    .foregroundStyle(publisher.status.lastError == nil ? Color.tpDimmed : Color.orange)
-                    .lineLimit(3)
+                InfoCaption(statusText, color: publisher.status.lastError == nil ? .tpDimmed : .orange)
             }
-            Text("Writes every paper sitting to the aw-watcher-paper bucket and rewrites the file above whole. Turn this on on one Mac only: aw-sync copies ActivityWatch buckets between Macs, so two publishing Macs would count every sitting twice.")
-                .font(.caption2)
-                .foregroundStyle(Color.tpDimmed)
+            InfoCaption(
+                "Turn this on on one Mac only.",
+                detail: "Writes every paper sitting to the aw-watcher-paper bucket and rewrites the file above whole. aw-sync copies ActivityWatch buckets between Macs, so two publishing Macs would count every sitting twice."
+            )
         }
     }
 
@@ -447,9 +442,17 @@ struct PaperPublishingSection: View {
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = false
         panel.message = "The app owns this file and rewrites it whole."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        var settings = controller.settings
-        settings.paperLogPath = url.path
-        controller.update(settings: settings)
+        let apply: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let url = panel.url else { return }
+            var settings = controller.settings
+            settings.paperLogPath = url.path
+            controller.update(settings: settings)
+        }
+        // Attached to the Settings window when there is one.
+        if let window = NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: apply)
+        } else {
+            apply(panel.runModal())
+        }
     }
 }

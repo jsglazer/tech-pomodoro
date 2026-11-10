@@ -69,20 +69,6 @@ struct FocusPanel: View {
                 LabeledRow(label: "Last", value: line)
             }
 
-            let today = controller.projectTotals(days: 1).prefix(4)
-            if !today.isEmpty {
-                Text("TODAY BY PROJECT")
-                    .font(.system(size: 9, weight: .semibold))
-                    .tracking(1.0)
-                    .foregroundStyle(Color.tpDimmed)
-                    .padding(.top, 2)
-                ForEach(Array(today)) { total in
-                    LabeledRow(label: total.name, value: minutes(total.seconds))
-                }
-                if let share = controller.meanFocusShare(days: 1) {
-                    LabeledRow(label: "Mean focus", value: percent(share))
-                }
-            }
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 6).stroke(Color.tpRule, lineWidth: 1))
@@ -151,34 +137,34 @@ struct FocusTabView: View {
                     .labelsHidden()
             }
 
-            Divider().overlay(Color.tpRule)
+            SettingsHeading("Folder rules")
 
             editor("Class folders", \.focus.areaRules)
             editor("Task folders (first match wins)", \.focus.taskRules)
-            Text("One folder per line. * matches one folder name. A note belongs to the first rule whose folder contains it.")
-                .font(.caption2)
-                .foregroundStyle(Color.tpDimmed)
+            InfoCaption(
+                "One folder per line; * matches one folder name.",
+                detail: "A note belongs to the first rule whose folder contains it. Class folders are the areas; task folders are inside them."
+            )
+
+            SettingsHeading("On task")
 
             editor("On-task apps", \.focus.onTaskApps)
             editor("On-task sites", \.focus.allowedSites)
             editor("Ignored apps", \.focus.neutralApps)
-            Text("PDFs always count as on task. Any other app or site is a distraction.")
-                .font(.caption2)
-                .foregroundStyle(Color.tpDimmed)
-
-            Divider().overlay(Color.tpRule)
-
-            documentSensing
-
-            Divider().overlay(Color.tpRule)
-
-            PaperPublishingSection(controller: controller, publisher: controller.paperPublisher)
+            InfoCaption("PDFs always count as on task. Any other app or site is a distraction.")
         }
-        .font(.system(size: 12))
+    }
+}
+
+/// The document sensor: which apps' open documents go to ActivityWatch. Runs whether or not the
+/// timer is running.
+struct DocumentSensorSettingsView: View {
+    @ObservedObject var controller: AppController
+
+    var body: some View {
+        documentSensing
     }
 
-    /// The document sensor: which apps' open documents go to ActivityWatch. Runs whether or not the
-    /// timer is running.
     private var documentSensing: some View {
         VStack(alignment: .leading, spacing: 6) {
             Toggle("Report open documents to ActivityWatch", isOn: controller.bind(\.focus.documents.enabled))
@@ -190,12 +176,9 @@ struct FocusTabView: View {
                 step: 5,
                 unit: "s"
             )
-            Text(controller.documentSensorStatusText)
-                .font(.caption2)
-                .foregroundStyle(statusIsError ? Color.orange : Color.tpDimmed)
-                .lineLimit(2)
+            InfoCaption(controller.documentSensorStatusText, color: statusIsError ? .orange : .tpDimmed)
 
-            Text("Watched apps (extensions)").foregroundStyle(Color.tpDimmed)
+            SettingsHeading("Watched apps (extensions)")
             ForEach(controller.settings.focus.documents.apps) { app in
                 HStack(spacing: 6) {
                     Text(app.name)
@@ -229,10 +212,12 @@ struct FocusTabView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            Text("When a watched app is in front, the full paths of its open documents of these types (for ForkLift, the folder it shows) go to the aw-watcher-documents bucket, and Focus files them under your class and task folders. Paths stay in this Mac's ActivityWatch (aw-sync copies them to your other Macs).")
-                .font(.caption2)
-                .foregroundStyle(Color.tpDimmed)
+            InfoCaption(
+                "Open documents of these types go to aw-watcher-documents.",
+                detail: "When a watched app is in front, the full paths of its open documents of these types (for ForkLift, the folder it shows) go to the aw-watcher-documents bucket, and Focus files them under your class and task folders. Paths stay in this Mac's ActivityWatch (aw-sync copies them to your other Macs)."
+            )
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var statusIsError: Bool {
@@ -256,7 +241,7 @@ struct FocusTabView: View {
                 .font(.system(size: 11, design: .monospaced))
                 .scrollContentBackground(.hidden)
                 .padding(3)
-                .frame(height: 44)
+                .frame(height: 80)
                 .background(RoundedRectangle(cornerRadius: 4).stroke(Color.tpRule, lineWidth: 1))
         }
     }
@@ -270,5 +255,63 @@ struct FocusTabView: View {
             Stepper("", value: value, in: range, step: step)
                 .labelsHidden()
         }
+    }
+}
+
+extension FocusTabView {
+    fileprivate func editor(_ title: String, _ keyPath: WritableKeyPath<PomodoroSettings, [String]>) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).foregroundStyle(Color.tpDimmed)
+            TextEditor(text: controller.linesBinding(keyPath))
+                .font(.system(size: 11, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(3)
+                .frame(height: 80)
+                .background(RoundedRectangle(cornerRadius: 4).stroke(Color.tpRule, lineWidth: 1))
+        }
+    }
+
+    fileprivate func stepper(_ label: String, _ value: Binding<Int>, range: ClosedRange<Int>, step: Int, unit: String) -> some View {
+        HStack {
+            Text(label).foregroundStyle(Color.tpDimmed)
+            Spacer()
+            Text("\(value.wrappedValue) \(unit)")
+                .font(.system(size: 12, design: .monospaced))
+            Stepper("", value: value, in: range, step: step)
+                .labelsHidden()
+        }
+    }
+}
+
+/// Today's time by project and mean focus, for the popover's Today tab.
+struct TodayFocusTotals: View {
+    @ObservedObject var controller: AppController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            let today = controller.projectTotals(days: 1).prefix(4)
+            if !today.isEmpty {
+                Text("TODAY BY PROJECT")
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(1.0)
+                    .foregroundStyle(Color.tpDimmed)
+                    .padding(.top, 2)
+                ForEach(Array(today)) { total in
+                    LabeledRow(label: total.name, value: minutes(total.seconds))
+                }
+                if let share = controller.meanFocusShare(days: 1) {
+                    LabeledRow(label: "Mean focus", value: percent(share))
+                }
+            }
+        }
+    }
+
+    private func percent(_ share: Double) -> String {
+        "\(Int((share * 100).rounded()))%"
+    }
+
+    private func minutes(_ seconds: Int) -> String {
+        let m = seconds / 60
+        return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m"
     }
 }

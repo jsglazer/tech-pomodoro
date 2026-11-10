@@ -1,18 +1,16 @@
 import SwiftUI
 import TechPomodoroCore
 
-/// The popover: a live countdown header with its own Stop, Pause and Skip controls, over three tabs.
+/// The popover: a live countdown header with its own Stop, Pause and Skip controls, over two tabs —
+/// Now (paper and focus) and Today (today's numbers and the paper sittings). Everything set once lives
+/// in the Settings window, behind the header's gear.
 struct PopoverRootView: View {
     @ObservedObject var controller: AppController
-    @State private var tab: Tab = .timer
+    @State private var tab: Tab = .now
 
     enum Tab: String, CaseIterable, Identifiable {
-        case timer = "Timer"
-        case intervals = "Intervals"
-        case settings = "Settings"
-        case sound = "Sound"
-        case focus = "Focus"
-        case paper = "Paper"
+        case now = "Now"
+        case today = "Today"
 
         var id: String { rawValue }
     }
@@ -43,12 +41,8 @@ struct PopoverRootView: View {
             // is reachable without scrolling.
             Group {
                 switch tab {
-                case .timer: TimerTabView(controller: controller)
-                case .intervals: IntervalsTabView(controller: controller)
-                case .settings: SettingsTabView(controller: controller)
-                case .sound: SoundTabView(controller: controller)
-                case .focus: FocusTabView(controller: controller)
-                case .paper: PaperTabView(controller: controller)
+                case .now: NowTabView(controller: controller)
+                case .today: TodayTabView(controller: controller)
                 }
             }
             .padding(12)
@@ -76,8 +70,7 @@ struct PopoverRootView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
-        // Wide enough for six tabs without truncating their names.
-        .frame(width: 360)
+        .frame(width: 320)
         .background(Color.tpBackground)
         .foregroundStyle(Color.tpPrimary)
         .preferredColorScheme(.dark)
@@ -174,6 +167,19 @@ private struct CountdownHeader: View {
         }
         .padding(.top, 14)
         .padding(.horizontal, 12)
+        .overlay(alignment: .topTrailing) {
+            Button {
+                controller.openSettings()
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.tpDimmed)
+                    .padding(10)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Settings")
+        }
         .alert("Stop the timer?", isPresented: $confirmingStop) {
             Button("Stop", role: .destructive) { controller.send(.stop) }
             Button("Cancel", role: .cancel) {}

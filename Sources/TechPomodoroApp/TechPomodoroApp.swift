@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var popover: NSPopover?
     private var controller: AppController?
     private var monitor: Any?
+    private let settingsWindow = SettingsWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let intervalStore: any IntervalStore
@@ -40,6 +41,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 .map { FilePaperCorrectionStore(url: $0) as any PaperCorrectionStoring } ?? MemoryPaperCorrectionStore()
         )
         self.controller = controller
+        controller.openSettingsHandler = { [weak self, weak controller] section in
+            guard let self, let controller else { return }
+            self.popover?.performClose(nil)
+            self.settingsWindow.show(controller: controller, section: section)
+        }
 
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.wantsLayer = true

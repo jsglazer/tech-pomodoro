@@ -2,8 +2,8 @@ import SwiftUI
 import TechPomodoroCore
 import TechPomodoroSync
 
-/// Menu bar appearance, thresholds, sleep behaviour, launch at login, and export.
-struct SettingsTabView: View {
+/// Menu bar appearance and the countdown thresholds.
+struct MenuBarSettingsView: View {
     @ObservedObject var controller: AppController
 
     var body: some View {
@@ -41,6 +41,8 @@ struct SettingsTabView: View {
             .disabled(!controller.settings.useRestColor)
             .opacity(controller.settings.useRestColor ? 1 : 0.4)
 
+            SettingsHeading("Thresholds")
+
             Group {
                 thresholdStepper("Warning at", controller.bind(\.warningThresholdMinutes))
                 thresholdStepper("Alert at", controller.bind(\.alertThresholdMinutes))
@@ -48,58 +50,11 @@ struct SettingsTabView: View {
             .disabled(controller.settings.menuBarMode == .clockIcon)
             .opacity(controller.settings.menuBarMode == .clockIcon ? 0.4 : 1)
 
-            Text("Thresholds colour the Work countdown only, in minutes mode. 0 disables one, and a threshold always wins over the custom colour.")
-                .font(.caption2)
-                .foregroundStyle(Color.tpDimmed)
-
-            Divider().overlay(Color.tpRule)
-
-            Picker("On sleep", selection: controller.bind(\.sleepBehavior)) {
-                Text("Resume").tag(SleepBehavior.resumeOnWake)
-                Text("Keep counting").tag(SleepBehavior.continueThroughSleep)
-                Text("Pause").tag(SleepBehavior.pauseOnSleep)
-            }
-            .pickerStyle(.segmented)
-
-            Toggle("Launch at login", isOn: Binding(
-                get: { controller.settings.launchAtLogin },
-                set: { controller.setLaunchAtLogin($0) }
-            ))
-            .toggleStyle(.switch)
-
-            if let warning = controller.loginItemWarning {
-                Text(warning)
-                    .font(.caption2)
-                    .foregroundStyle(Color.tpWarning)
-            }
-
-            Divider().overlay(Color.tpRule)
-
-            Toggle("Sync via iCloud", isOn: controller.bind(\.cloudSyncEnabled))
-                .toggleStyle(.switch)
-            Text("Settings and history, across your Macs and iPhone. \(controller.syncStatus.label)")
-                .font(.caption2)
-                .foregroundStyle(controller.syncStatus.isProblem ? Color.tpWarning : Color.tpDimmed)
-
-            Divider().overlay(Color.tpRule)
-
-            MirrorSettingsSection(controller: controller, mirror: controller.mirror)
-
-            Divider().overlay(Color.tpRule)
-
-            PaperClassesEditor(controller: controller)
-
-            Divider().overlay(Color.tpRule)
-
-            HStack {
-                Text("Export history").foregroundStyle(Color.tpDimmed)
-                Spacer()
-                Button("CSV") { controller.exportHistory(as: .csv) }
-                Button("JSON") { controller.exportHistory(as: .json) }
-            }
-            .font(.system(size: 12))
+            InfoCaption(
+                "Minutes mode only. 0 disables a threshold.",
+                detail: "Thresholds colour the countdown yellow, then red, as a phase runs out. A threshold always wins over the custom and rest colours."
+            )
         }
-        .font(.system(size: 12))
     }
 
     private func thresholdStepper(_ label: String, _ value: Binding<Int>) -> some View {
@@ -132,6 +87,50 @@ struct SettingsTabView: View {
     }
 }
 
+/// What differs per device: sleep, login, iCloud sync and the iPhone mirror.
+struct DevicesSettingsView: View {
+    @ObservedObject var controller: AppController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("On sleep", selection: controller.bind(\.sleepBehavior)) {
+                Text("Resume").tag(SleepBehavior.resumeOnWake)
+                Text("Keep counting").tag(SleepBehavior.continueThroughSleep)
+                Text("Pause").tag(SleepBehavior.pauseOnSleep)
+            }
+            .pickerStyle(.segmented)
+            InfoCaption(
+                "What a running timer does when this Mac sleeps.",
+                detail: "Resume freezes on sleep and carries on at wake. Keep counting runs against the clock and catches up at wake. Pause freezes and waits for you."
+            )
+
+            Toggle("Launch at login", isOn: Binding(
+                get: { controller.settings.launchAtLogin },
+                set: { controller.setLaunchAtLogin($0) }
+            ))
+            .toggleStyle(.switch)
+
+            if let warning = controller.loginItemWarning {
+                InfoCaption(warning, color: .tpWarning)
+            }
+
+            SettingsHeading("iCloud")
+
+            Toggle("Sync via iCloud", isOn: controller.bind(\.cloudSyncEnabled))
+                .toggleStyle(.switch)
+            InfoCaption(
+                controller.syncStatus.label,
+                detail: "Settings, history and paper corrections sync across your Macs and iPhone through your private iCloud database.",
+                color: controller.syncStatus.isProblem ? .tpWarning : .tpDimmed
+            )
+
+            SettingsHeading("iPhone")
+
+            MirrorSettingsSection(controller: controller, mirror: controller.mirror)
+        }
+    }
+}
+
 /// Mirroring to the iPhone: the per-device switch, the push status, and the APNs key. The key is
 /// imported once from the .p8 file into the Keychain; nothing about it is ever written to the app's files.
 private struct MirrorSettingsSection: View {
@@ -145,9 +144,11 @@ private struct MirrorSettingsSection: View {
             Toggle("Mirror timer with iPhone", isOn: controller.bind(\.mirrorEnabled))
                 .help("This Mac's timer shows on the iPhone's Lock Screen, and the iPhone's timer shows here while this Mac's is idle. Display only, both ways.")
                 .toggleStyle(.switch)
-            Text(mirror.status.label)
-                .font(.caption2)
-                .foregroundStyle(mirror.status.isProblem ? Color.tpWarning : Color.tpDimmed)
+            InfoCaption(
+                mirror.status.label,
+                detail: "This Mac's timer shows on the iPhone's Lock Screen, and the iPhone's timer shows here while this Mac's is idle. Display only, both ways.",
+                color: mirror.status.isProblem ? .tpWarning : .tpDimmed
+            )
 
             HStack {
                 Text("APNs key").foregroundStyle(Color.tpDimmed)

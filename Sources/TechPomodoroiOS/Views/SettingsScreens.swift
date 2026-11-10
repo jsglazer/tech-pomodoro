@@ -118,13 +118,11 @@ private struct NotificationStatusRow: View {
 
 /// Countdown colours and thresholds. The Mac-only settings — menu bar mode, filled background,
 /// launch at login, sleep behaviour — are hidden here but left untouched in the stored settings.
-struct SettingsScreen: View {
+struct DisplayScreen: View {
     @ObservedObject var controller: PomodoroController
 
     var body: some View {
-        ThemedForm(title: "Settings") {
-            PaperClassesSection(controller: controller)
-
+        ThemedForm(title: "Display") {
             Section {
                 NumberRow(label: "Warning at", value: controller.bind(\.warningThresholdMinutes), range: 0...60, unit: "min", tint: .tpWarning)
                 NumberRow(label: "Alert at", value: controller.bind(\.alertThresholdMinutes), range: 0...60, unit: "min", tint: .tpAlert)
@@ -142,7 +140,16 @@ struct SettingsScreen: View {
                 ColorPicker("Countdown colour", selection: controller.countdownColor, supportsOpacity: false)
                     .disabled(!controller.settings.useCustomTextColor)
             }
+        }
+    }
+}
 
+/// iCloud sync and the Mac mirror.
+struct DevicesScreen: View {
+    @ObservedObject var controller: PomodoroController
+
+    var body: some View {
+        ThemedForm(title: "Devices") {
             Section {
                 Toggle("Sync via iCloud", isOn: controller.bind(\.cloudSyncEnabled))
             } header: {
@@ -159,19 +166,12 @@ struct SettingsScreen: View {
             } footer: {
                 Text("While a timer runs on your Mac, the Lock Screen and this app show it instead of the iPhone's own. While the iPhone's timer runs, your Macs show it in the menu bar, and an awake Mac moves the Lock Screen countdown on at each phase change. Display only, both ways. Turn on Mirror timer with iPhone on the Mac too.")
             }
-
-            Section {
-                HStack {
-                    Text("tech-pomodoro")
-                    Spacer()
-                    Text(RootView.appVersion).foregroundStyle(Color.tpDimmed)
-                }
-            }
         }
     }
 }
 
-/// The rolling windows, and export through the share sheet in place of the Mac's save panel.
+/// The rolling windows, paper by window, and export through the share sheet in place of the Mac's
+/// save panel. Today's numbers are also on the Today tab.
 struct AnalyticsScreen: View {
     @ObservedObject var controller: PomodoroController
     @State private var sharing: SharedFile?
@@ -184,22 +184,15 @@ struct AnalyticsScreen: View {
                 AnalyticsRow(title: "Last 5 days", window: controller.analytics.lastFiveDays)
             }
 
-            Section("Paper today") {
-                let today = controller.paperToday
-                if today.isEmpty {
-                    Text("No paper time today.")
-                        .foregroundStyle(Color.tpDimmed)
-                }
-                ForEach(today, id: \.className) { total in
+            Section("Paper") {
+                ForEach([1, 3, 5], id: \.self) { days in
                     HStack {
-                        Text(total.className).foregroundStyle(Color.tpDimmed)
+                        Text(days == 1 ? "Today" : "Last \(days) days").foregroundStyle(Color.tpDimmed)
                         Spacer()
-                        Text(PaperHistory.durationText(total.seconds))
+                        Text(PaperHistory.lineText(controller.paperTotals(days: days)) ?? "—")
                             .font(.body.monospacedDigit())
+                            .multilineTextAlignment(.trailing)
                     }
-                }
-                NavigationLink("Paper sittings") {
-                    PaperSittingsScreen(controller: controller)
                 }
             }
 

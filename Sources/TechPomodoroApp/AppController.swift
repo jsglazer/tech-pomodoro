@@ -592,8 +592,28 @@ final class AppController: ObservableObject {
     }
 
     /// Today's paper minutes by class, e.g. `Data 1h 05m · Econ 25m`; nil when none.
-    var paperTodayLine: String? {
-        PaperHistory.lineText(PaperHistory.totals(records: history, corrections: paperCorrections, now: dateProvider.now(), calendar: calendar, days: 1))
+    var paperTodayLine: String? { paperLine(days: 1) }
+
+    /// Paper minutes by class over the calendar-day window; nil when none.
+    func paperLine(days: Int) -> String? {
+        PaperHistory.lineText(PaperHistory.totals(records: history, corrections: paperCorrections, now: dateProvider.now(), calendar: calendar, days: days))
+    }
+
+    /// Opens the Settings window; set by the app delegate.
+    var openSettingsHandler: ((SettingsSection?) -> Void)?
+
+    func openSettings(_ section: SettingsSection? = nil) {
+        openSettingsHandler?(section)
+    }
+
+    /// The one thing that needs attention, for the popover's warning line; nil when all is well.
+    var attentionLine: (text: String, section: SettingsSection)? {
+        if syncStatus.isProblem { return ("iCloud: \(syncStatus.label)", .devices) }
+        if mirror.status.isProblem { return ("iPhone mirror: \(mirror.status.label)", .devices) }
+        if settings.focus.enabled, focusStatus.hasPrefix("Offline") { return ("ActivityWatch: \(focusStatus)", .focus) }
+        if let error = paperPublisher.status.lastError { return ("Paper publishing: \(error)", .paper) }
+        if let warning = loginItemWarning { return (warning, .devices) }
+        return nil
     }
 
     /// Logs a past sitting: a manual Work record with `paper`, never a rep, no work time.

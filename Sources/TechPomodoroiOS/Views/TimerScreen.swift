@@ -287,11 +287,10 @@ struct AnalyticsPanel: View {
     let analytics: AnalyticsSummary
 
     var body: some View {
+        // Today only; the longer windows are in Settings → Analytics.
         VStack(alignment: .leading, spacing: 8) {
-            SectionLabel("ANALYTICS")
-            AnalyticsRow(title: "Today", window: analytics.today)
-            AnalyticsRow(title: "Last 3 days", window: analytics.lastThreeDays)
-            AnalyticsRow(title: "Last 5 days", window: analytics.lastFiveDays)
+            SectionLabel("TODAY")
+            AnalyticsRow(title: "Work", window: analytics.today)
         }
         .panelStyle()
     }

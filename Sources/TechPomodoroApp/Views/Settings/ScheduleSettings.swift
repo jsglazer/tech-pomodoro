@@ -18,9 +18,7 @@ struct IntervalsTabView: View {
                 .toggleStyle(.switch)
                 .font(.system(size: 12))
 
-            Text("A cycle is \(controller.settings.repsPerCycle) work/rest reps then a long break; a session is \(controller.settings.cyclesPerSession) cycles then the session rest.")
-                .font(.caption2)
-                .foregroundStyle(Color.tpDimmed)
+            InfoCaption("A cycle is \(controller.settings.repsPerCycle) work/rest reps then a long break; a session is \(controller.settings.cyclesPerSession) cycles then the session rest.")
         }
     }
 

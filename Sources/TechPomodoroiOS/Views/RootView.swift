@@ -1,8 +1,8 @@
 import SwiftUI
 import TechPomodoroCore
 
-/// The whole app: the Mac popover's tabs, promoted to a tab bar, with Analytics given a tab of its
-/// own now that there is room for it.
+/// The whole app, in three tabs: Timer (countdown and Paper), Today (today's numbers and the paper
+/// sittings) and Settings (everything set once, as a list of sections).
 struct RootView: View {
     @ObservedObject var controller: PomodoroController
 
@@ -11,14 +11,12 @@ struct RootView: View {
         TabView {
             TimerScreen(controller: controller)
                 .tabItem { Label("Timer", systemImage: "timer") }
-            IntervalsScreen(controller: controller)
-                .tabItem { Label("Intervals", systemImage: "square.stack.3d.up") }
-            SoundScreen(controller: controller)
-                .tabItem { Label("Sound", systemImage: "bell") }
-            SettingsScreen(controller: controller)
+            NavigationStack {
+                TodayScreen(controller: controller)
+            }
+            .tabItem { Label("Today", systemImage: "calendar") }
+            SettingsRootScreen(controller: controller)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
-            AnalyticsScreen(controller: controller)
-                .tabItem { Label("Analytics", systemImage: "chart.bar") }
         }
         .tint(Color.tpPrimary)
         .preferredColorScheme(.dark)
@@ -43,17 +41,62 @@ struct RootView: View {
     }
 }
 
-/// A settings screen in the app's dark palette: a grouped form on the theme background.
+/// A settings page in the app's dark palette: a grouped form on the theme background. Pushed inside
+/// the Settings tab's navigation stack, so it has none of its own.
 struct ThemedForm<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
 
     var body: some View {
+        Form { content }
+            .scrollContentBackground(.hidden)
+            .background(Color.tpBackground)
+            .navigationTitle(title)
+    }
+}
+
+/// The Settings tab: one list of sections, the same as the Mac's Settings window where they exist on iOS.
+struct SettingsRootScreen: View {
+    @ObservedObject var controller: PomodoroController
+
+    var body: some View {
         NavigationStack {
-            Form { content }
-                .scrollContentBackground(.hidden)
-                .background(Color.tpBackground)
-                .navigationTitle(title)
+            List {
+                Section {
+                    link("Schedule", "clock") { IntervalsScreen(controller: controller) }
+                    link("Alerts", "bell") { SoundScreen(controller: controller) }
+                    link("Display", "paintpalette") { DisplayScreen(controller: controller) }
+                    link("Paper classes", "book") {
+                        ThemedForm(title: "Paper classes") { PaperClassesSection(controller: controller) }
+                    }
+                    link("Devices", "laptopcomputer.and.iphone") { DevicesScreen(controller: controller) }
+                    link("Analytics", "chart.bar") { AnalyticsScreen(controller: controller) }
+                } footer: {
+                    if controller.syncStatus.isProblem {
+                        Label("iCloud: \(controller.syncStatus.label)", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Color.tpWarning)
+                    }
+                }
+
+                Section {
+                    HStack {
+                        Text("tech-pomodoro")
+                        Spacer()
+                        Text(RootView.appVersion).foregroundStyle(Color.tpDimmed)
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.tpBackground)
+            .navigationTitle("Settings")
+        }
+    }
+
+    private func link<Destination: View>(_ title: String, _ image: String, @ViewBuilder destination: @escaping () -> Destination) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            Label(title, systemImage: image)
         }
     }
 }

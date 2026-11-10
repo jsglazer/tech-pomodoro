@@ -442,8 +442,10 @@ final class PomodoroController: ObservableObject {
     }
 
     /// Today's paper minutes by class, per class; empty when none.
-    var paperToday: [(className: String, seconds: Int)] {
-        PaperHistory.totals(records: history, corrections: paperCorrections, now: dateProvider.now(), calendar: calendar, days: 1)
+    var paperToday: [(className: String, seconds: Int)] { paperTotals(days: 1) }
+
+    func paperTotals(days: Int) -> [(className: String, seconds: Int)] {
+        PaperHistory.totals(records: history, corrections: paperCorrections, now: dateProvider.now(), calendar: calendar, days: days)
     }
 
     func addPaperSitting(tag: PaperTag, span: DateInterval) {

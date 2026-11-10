@@ -28,11 +28,9 @@ struct SoundTabView: View {
                 .disabled(!controller.settings.popupEnabled)
                 .opacity(controller.settings.popupEnabled ? 1 : 0.4)
 
-            Text("A dialog box appears at every boundary and closes itself after the time set here, or stays until dismissed by hand when set to never.")
-                .font(.caption2)
-                .foregroundStyle(Color.tpDimmed)
+            InfoCaption("Set to never, the dialog waits for a click.", detail: "A dialog box appears at every boundary and closes itself after the time set here.")
 
-            Divider().overlay(Color.tpRule)
+            SettingsHeading("Sound")
 
             Picker("Sound", selection: controller.bind(\.soundName)) {
                 ForEach(controller.soundCatalog.availableSoundNames, id: \.self) { name in
@@ -43,9 +41,7 @@ struct SoundTabView: View {
             Button("Preview") { controller.previewSound() }
                 .font(.system(size: 12))
 
-            Text("Sounds are read from the system sound folders on this Mac.")
-                .font(.caption2)
-                .foregroundStyle(Color.tpDimmed)
+            InfoCaption("Sounds are read from the system sound folders on this Mac.")
         }
         .font(.system(size: 12))
     }
