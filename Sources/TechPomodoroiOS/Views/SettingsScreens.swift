@@ -151,11 +151,11 @@ struct SettingsScreen: View {
             }
 
             Section {
-                Toggle("Show Mac timer", isOn: controller.bind(\.mirrorEnabled))
+                Toggle("Mirror timer with Mac", isOn: controller.bind(\.mirrorEnabled))
             } header: {
                 Text("Mac timer")
             } footer: {
-                Text("While a timer runs on your Mac, the Lock Screen and this app show it instead of the iPhone's own, display only. Turn on Mirror timer to iPhone on the Mac too.")
+                Text("While a timer runs on your Mac, the Lock Screen and this app show it instead of the iPhone's own. While the iPhone's timer runs, your Macs show it in the menu bar, and an awake Mac moves the Lock Screen countdown on at each phase change. Display only, both ways. Turn on Mirror timer with iPhone on the Mac too.")
             }
 
             Section {

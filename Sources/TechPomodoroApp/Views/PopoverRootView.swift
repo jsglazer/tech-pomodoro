@@ -82,11 +82,17 @@ struct PopoverRootView: View {
 }
 
 /// The countdown itself is the pause control: clicking the numbers toggles running and paused.
+///
+/// While this Mac's timer is idle and an iPhone's is running, it shows the iPhone's, display only:
+/// Start still starts this Mac's own timer (which then takes over), and the other controls are off.
 private struct CountdownHeader: View {
     @ObservedObject var controller: AppController
     @State private var confirmingStop = false
 
-    private var state: PomodoroState { controller.state }
+    private var phone: PhoneTimerWatcher.Display? { controller.phoneDisplay }
+    private var state: PomodoroState { phone?.state ?? controller.state }
+    /// What the controls act on: always this Mac's own timer.
+    private var ownActivity: PomodoroState.Activity { controller.state.activity }
 
     private var remainingText: String {
         let remaining = Int(state.remaining(at: controller.displayNow).rounded(.up))
@@ -100,6 +106,12 @@ private struct CountdownHeader: View {
                 .tracking(1.4)
                 .foregroundStyle(Color.tpDimmed)
 
+            if let phone {
+                Label("On \(phone.phoneName) · display only", systemImage: "iphone")
+                    .font(.caption2)
+                    .foregroundStyle(Color.tpDimmed)
+            }
+
             Button {
                 controller.send(.toggleRunning)
             } label: {
@@ -109,7 +121,8 @@ private struct CountdownHeader: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Click the countdown to pause or resume")
+            .disabled(phone != nil)
+            .help(phone == nil ? "Click the countdown to pause or resume" : "The iPhone's timer: control it on the iPhone")
 
             Text(state.activity == .idle
                  ? "Rep 1 of \(state.settings.repsPerCycle) · Cycle 1 of \(state.settings.cyclesPerSession)"
@@ -120,7 +133,7 @@ private struct CountdownHeader: View {
             HStack(spacing: 8) {
                 // Left slot: Start when idle, and Stop takes that same place once running — so the
                 // button you reach for first is always on the left.
-                if state.activity == .idle {
+                if ownActivity == .idle {
                     ControlButton(title: "Start", enabled: true) {
                         controller.send(.start)
                     }
@@ -134,15 +147,15 @@ private struct CountdownHeader: View {
                 // Middle slot: always the pause control.
                 // Pause filled yellow, Resume filled green, so the button says which way it goes.
                 ControlButton(
-                    title: state.activity == .paused ? "Resume" : "Pause",
-                    enabled: state.activity != .idle,
-                    fill: state.activity == .paused ? .tpSuccess : .tpWarning
+                    title: ownActivity == .paused ? "Resume" : "Pause",
+                    enabled: ownActivity != .idle,
+                    fill: ownActivity == .paused ? .tpSuccess : .tpWarning
                 ) {
                     controller.send(.toggleRunning)
                 }
 
                 // Far right: jump straight to the next phase.
-                ControlButton(title: "Skip", enabled: state.activity != .idle) {
+                ControlButton(title: "Skip", enabled: ownActivity != .idle) {
                     controller.send(.skip)
                 }
                 .help("End this phase now and start the next one")

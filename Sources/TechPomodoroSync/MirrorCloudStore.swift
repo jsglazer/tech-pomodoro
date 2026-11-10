@@ -7,13 +7,19 @@ public struct MirrorSnapshot: Sendable {
     public var phones: [MirrorPhone] = []
     public var timers: [MirrorTimer] = []
     public var channels: [APNsEnvironment: MirrorChannel] = [:]
+    /// Each iPhone's own timer (`iphone-<id>`), for the Macs to show and push boundaries for.
+    public var phoneTimers: [MirrorTimer] = []
+    /// Each iPhone's own broadcast channel (`ownchannel-<id>`), keyed by the iPhone's device id. A Mac
+    /// creates it; the iPhone's own Live Activity listens on it.
+    public var ownChannels: [String: MirrorChannel] = [:]
 
     public init() {}
 }
 
 /// The records that hand the Mac timer to the iPhone: one `MirrorRecord` per iPhone (`phone-<id>`),
 /// per Mac (`mac-<id>`), and per APNs environment's broadcast channel (`channel-<env>`), each carrying
-/// its value as a JSON `payload`.
+/// its value as a JSON `payload`. The other way round, each iPhone's own timer (`iphone-<id>`) and the
+/// channel its own Live Activity listens on (`ownchannel-<id>`) let a Mac show and push that timer.
 ///
 /// They sit in the same `Pomodoro` zone as settings and history but are read and written directly
 /// rather than through the sync engine: the Mac needs the newest tokens the moment before it pushes,
@@ -73,6 +79,10 @@ public final class MirrorCloudStore: Sendable {
                 snapshot.timers.append(timer)
             } else if name.hasPrefix("channel-"), let channel = try? MirrorCodec.decode(MirrorChannel.self, from: data) {
                 snapshot.channels[channel.environment] = channel
+            } else if name.hasPrefix("iphone-"), let timer = try? MirrorCodec.decode(MirrorTimer.self, from: data) {
+                snapshot.phoneTimers.append(timer)
+            } else if name.hasPrefix(Self.ownChannelPrefix), let channel = try? MirrorCodec.decode(MirrorChannel.self, from: data) {
+                snapshot.ownChannels[String(name.dropFirst(Self.ownChannelPrefix.count))] = channel
             }
         }
         return snapshot
@@ -92,10 +102,31 @@ public final class MirrorCloudStore: Sendable {
         try await save(name: Self.channelName(channel.environment), payload: MirrorCodec.encode(channel))
     }
 
+    /// An iPhone's own timer.
+    public func save(phoneTimer: MirrorTimer) async throws {
+        try await save(name: "iphone-\(phoneTimer.deviceID)", payload: MirrorCodec.encode(phoneTimer))
+    }
+
+    /// The channel an iPhone's own Live Activity listens on.
+    public func save(ownChannel: MirrorChannel, phoneID: String) async throws {
+        try await save(name: Self.ownChannelPrefix + phoneID, payload: MirrorCodec.encode(ownChannel))
+    }
+
+    /// `claim(channel:)` for an iPhone's own channel.
+    public func claim(ownChannel: MirrorChannel, phoneID: String) async throws -> MirrorChannel {
+        try await claim(channel: ownChannel, name: Self.ownChannelPrefix + phoneID)
+    }
+
+    private static let ownChannelPrefix = "ownchannel-"
+
     /// Stores a freshly created channel unless another Mac got there first, in which case its channel
     /// is returned instead, so every Mac pushes to the one channel the iPhones listen to.
     public func claim(channel: MirrorChannel) async throws -> MirrorChannel {
-        let record = CKRecord(recordType: Self.recordType, recordID: recordID(Self.channelName(channel.environment)))
+        try await claim(channel: channel, name: Self.channelName(channel.environment))
+    }
+
+    private func claim(channel: MirrorChannel, name: String) async throws -> MirrorChannel {
+        let record = CKRecord(recordType: Self.recordType, recordID: recordID(name))
         record[Field.payload] = try MirrorCodec.encode(channel) as NSData
         record[Field.modifiedAt] = Date() as NSDate
         do {

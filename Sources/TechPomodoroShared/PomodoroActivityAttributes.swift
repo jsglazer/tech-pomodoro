@@ -16,6 +16,10 @@ struct PomodoroActivityAttributes: ActivityAttributes {
 
     var isMirror: Bool { mirrorSource != nil }
 
+    /// On the iPhone's own activity: the broadcast channel it was started on, over which an awake Mac
+    /// pushes the phase boundaries this suspended app cannot. Nil when started before a Mac made one.
+    var ownChannel: String?
+
     struct ContentState: Codable, Hashable, Sendable {
         /// "Work", "Rest", "Long Break", "Session Rest".
         var phaseTitle: String
@@ -35,6 +39,17 @@ struct PomodoroActivityAttributes: ActivityAttributes {
         var tintHex: String
         /// The Mac being mirrored; nil for the iPhone's own timer.
         var mirroredFrom: String?
+        /// The phase after this one, so the activity can count it down by itself once this countdown
+        /// has run out and nothing has updated it. Nil while paused or when the session ends here.
+        var nextPhase: NextPhase?
+    }
+
+    struct NextPhase: Codable, Hashable, Sendable {
+        var title: String
+        var startsAt: Date
+        var endsAt: Date
+        var progressLine: String
+        var tintHex: String
     }
 
     struct UpcomingPhase: Codable, Hashable, Sendable {

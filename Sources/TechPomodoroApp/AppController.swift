@@ -86,6 +86,11 @@ final class AppController: ObservableObject {
     /// Pushes this Mac's timer to the iPhone's Live Activity.
     let mirror = MirrorPusher()
 
+    /// The iPhone's own timer, shown here display only while this Mac's timer is idle.
+    private lazy var phoneTimer = PhoneTimerWatcher(apns: mirror.apns) { [weak self] in self?.mirror.credentials }
+    /// What the menu bar and popover show of the iPhone's timer; nil while this Mac's own timer runs.
+    @Published private(set) var phoneDisplay: PhoneTimerWatcher.Display?
+
     /// Reports the front app's open documents to ActivityWatch; independent of the timer.
     private var documentSensor: DocumentSensorService?
 
@@ -168,6 +173,7 @@ final class AppController: ObservableObject {
         if visible {
             displayNow = now
             cloudSync?.fetchNow()
+            phoneTimer.refreshNow()
         }
     }
 
@@ -181,6 +187,7 @@ final class AppController: ObservableObject {
                 self?.send(.didWake)
                 // Another device may have logged intervals or changed settings while this Mac slept.
                 self?.cloudSync?.fetchNow()
+                self?.phoneTimer.refreshNow()
             }
         }
     }
@@ -206,6 +213,7 @@ final class AppController: ObservableObject {
             self.mirror.stateDidChange(self.state, at: self.dateProvider.now())
         }
         mirror.setEnabled(state.settings.mirrorEnabled, state: state, at: dateProvider.now())
+        phoneTimer.setEnabled(state.settings.mirrorEnabled)
         applyMigrations()
     }
 
@@ -264,8 +272,20 @@ final class AppController: ObservableObject {
         handle(effects: state.pendingEffects)
         persist(records: records, at: now)
         pollFocusIfDue(at: now)
+        showPhoneTimer(at: now)
         refreshPresentation()
         mirror.stateDidChange(state, at: now)
+    }
+
+    /// Moves the iPhone's timer on and, while this Mac's own timer is idle, shows it and sounds its
+    /// boundaries. Its history is the iPhone's to log; it reaches here through iCloud sync.
+    private func showPhoneTimer(at now: Date) {
+        let effects = phoneTimer.tick(settings: state.settings, at: now)
+        let shown = state.activity == .idle ? phoneTimer.display : nil
+        if shown != phoneDisplay { phoneDisplay = shown }
+        if state.activity == .idle, !effects.isEmpty, !isPresentingPopup {
+            handle(effects: effects, fromPhone: true)
+        }
     }
 
     func update(settings newSettings: PomodoroSettings) {
@@ -278,6 +298,7 @@ final class AppController: ObservableObject {
         }
         if old.mirrorEnabled != newSettings.mirrorEnabled {
             mirror.setEnabled(newSettings.mirrorEnabled, state: state, at: dateProvider.now())
+            phoneTimer.setEnabled(newSettings.mirrorEnabled)
         }
         if old.focus.documents != newSettings.focus.documents || old.focus.serverURL != newSettings.focus.serverURL {
             documentSensor?.sampleNow()
@@ -396,7 +417,8 @@ final class AppController: ObservableObject {
 
     // MARK: - Effects
 
-    private func handle(effects: [PomodoroEffect]) {
+    /// `fromPhone` when the alerts are the iPhone's timer's. This Mac's own alert settings apply either way.
+    private func handle(effects: [PomodoroEffect], fromPhone: Bool = false) {
         for effect in effects {
             guard case .alert = effect else { continue }
             if state.settings.dingEnabled {
@@ -406,14 +428,22 @@ final class AppController: ObservableObject {
                 presenter?.flash(times: state.settings.flashRepeatCount)
             }
             if state.settings.popupEnabled {
-                presentPopup(for: effect)
+                presentPopup(for: effect, fromPhone: fromPhone)
             }
         }
     }
 
-    private func presentPopup(for effect: PomodoroEffect) {
+    private func presentPopup(for effect: PomodoroEffect, fromPhone: Bool = false) {
         guard case .alert(let kind) = effect else { return }
-        let (title, message) = popupText(for: kind)
+        var (title, message) = popupText(for: kind)
+        if fromPhone {
+            // `state` is this Mac's idle timer; the phase starting is the iPhone's.
+            if kind == .sessionComplete {
+                message = "The iPhone's schedule has finished."
+            } else if let phone = phoneTimer.display {
+                message = "\(phone.state.phase.title) is starting on \(phone.phoneName)."
+            }
+        }
         isPresentingPopup = true
         let limit = state.settings.popupDismissSeconds
         popupPresenter.present(title: title, message: message, dismissAfter: limit > 0 ? TimeInterval(limit) : nil)
@@ -462,6 +492,14 @@ final class AppController: ObservableObject {
     }
 
     private func refreshPresentation() {
+        if let phone = phoneDisplay {
+            // The iPhone's timer, drawn like this Mac's own; the hover says whose it is.
+            presenter?.apply(MenuBarFormatter.presentation(for: phone.state, at: now, focus: nil))
+            presenter?.setTooltip("\(MenuBarFormatter.hoverText(for: phone.state, at: now)) — on \(phone.phoneName)")
+            let info = MenuBarFormatter.hoverInfo(for: phone.state, at: now, focus: nil)
+            presenter?.setHoverInfo(HoverInfo(title: "\(info.title) · \(phone.phoneName)", detail: info.detail))
+            return
+        }
         presenter?.apply(MenuBarFormatter.presentation(for: state, at: now, focus: focus))
         presenter?.setTooltip(MenuBarFormatter.hoverText(for: state, at: now))
         presenter?.setHoverInfo(MenuBarFormatter.hoverInfo(for: state, at: now, focus: focus))

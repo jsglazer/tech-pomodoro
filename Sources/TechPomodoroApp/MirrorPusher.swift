@@ -29,7 +29,7 @@ final class MirrorPusher: ObservableObject {
             case .off: return "Off"
             case .unavailable(let why): return why
             case .needsKey: return "Import your APNs key (.p8) to push to the iPhone"
-            case .noPhone: return "No iPhone yet: open Pomodoro on the iPhone with Show Mac timer on"
+            case .noPhone: return "No iPhone yet: open Pomodoro on the iPhone with Mirror timer with Mac on"
             case .ready: return "Mirroring to iPhone · ready"
             case .pushed(let date):
                 return "Mirroring to iPhone · last push \(date.formatted(date: .omitted, time: .shortened))"
@@ -49,7 +49,7 @@ final class MirrorPusher: ObservableObject {
     @Published private(set) var credentials: APNsCredentials?
 
     private let store = MirrorCloudStore()
-    private let apns = APNsClient()
+    let apns = APNsClient()
     private let deviceID: String
     private let deviceName: String
 

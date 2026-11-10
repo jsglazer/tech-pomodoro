@@ -13,15 +13,17 @@ struct TechPomodoroWidgets: WidgetBundle {
 /// The lock screen banner and the Dynamic Island — the iOS stand-in for the Mac's menu bar item.
 ///
 /// Every countdown here is `Text(timerInterval:)` or `ProgressView(timerInterval:)`, which the system
-/// animates itself: no update from the app is needed while a phase runs.
+/// animates itself: no update from the app is needed while a phase runs. At a phase end nothing may be
+/// able to update it (the app is suspended, no Mac is awake to push), so the activity goes stale there,
+/// the system draws it again, and it moves on to `nextPhase` by itself (see `moved(at:)`).
 struct PomodoroLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: PomodoroActivityAttributes.self) { context in
-            LockScreenView(state: context.state, isStale: context.isStale, isMirror: context.attributes.isMirror)
+            LockScreenView(state: context.state.moved(at: Date()), isMirror: context.attributes.isMirror)
                 .activityBackgroundTint(Color.tpBackground)
                 .activitySystemActionForegroundColor(Color.tpPrimary)
         } dynamicIsland: { context in
-            let state = context.state
+            let state = context.state.moved(at: Date()).state
             let isMirror = context.attributes.isMirror
             let tint = Color(hexString: state.tintHex)
             return DynamicIsland {
@@ -68,10 +70,44 @@ struct PomodoroLiveActivity: Widget {
     }
 }
 
+/// The content as it should read at a given moment, once any phase end it has run past is accounted for.
+struct MovedContent {
+    var state: PomodoroActivityAttributes.ContentState
+    /// Drawn at a moment past even the end of the phase it could move on to: what the clock says now
+    /// is only known from `upcoming`, until the app or a Mac updates the activity.
+    var isBehind: Bool
+    var now: Date
+}
+
+extension PomodoroActivityAttributes.ContentState {
+    /// Past the end of a running phase, the next phase takes its place: its title, countdown, progress
+    /// and tint. The activity is only drawn again when its content changes or it goes stale, so this
+    /// carries it across one boundary on its own; a Mac push or the app catches it up after that.
+    func moved(at now: Date) -> MovedContent {
+        guard !isPaused, now >= phaseEndsAt else { return MovedContent(state: self, isBehind: false, now: now) }
+        guard let next = nextPhase else { return MovedContent(state: self, isBehind: !upcoming.isEmpty, now: now) }
+        var moved = self
+        moved.phaseTitle = next.title
+        moved.phaseStartedAt = next.startsAt
+        moved.phaseEndsAt = next.endsAt
+        moved.progressLine = next.progressLine
+        moved.tintHex = next.tintHex
+        moved.upcoming = upcoming.filter { $0.startsAt > next.startsAt }
+        moved.nextPhase = nil
+        return MovedContent(state: moved, isBehind: now >= next.endsAt, now: now)
+    }
+}
+
 private struct LockScreenView: View {
-    let state: PomodoroActivityAttributes.ContentState
-    let isStale: Bool
+    let moved: MovedContent
     let isMirror: Bool
+
+    init(state: MovedContent, isMirror: Bool) {
+        self.moved = state
+        self.isMirror = isMirror
+    }
+
+    private var state: PomodoroActivityAttributes.ContentState { moved.state }
 
     var body: some View {
         let tint = Color(hexString: state.tintHex)
@@ -110,14 +146,16 @@ private struct LockScreenView: View {
         .padding(16)
     }
 
-    /// What follows the current phase. Once the countdown has run out with the app suspended, the
-    /// activity cannot move itself on, so it says plainly what the schedule implies instead.
+    /// What follows the current phase. Drawn past even the phase it moved on to, it says plainly what
+    /// the schedule implies instead.
     private var upcomingLine: Text {
-        guard let next = state.upcoming.first else {
-            return Text(state.isPaused ? "Paused" : "Last phase of the session")
+        if moved.isBehind {
+            let current = state.upcoming.last { $0.startsAt <= moved.now } ?? state.upcoming.first
+            let title = current?.title ?? "Next phase"
+            return Text(isMirror ? "Now \(title) — waiting for the Mac" : "Now \(title) — open to refresh")
         }
-        if isStale {
-            return Text(isMirror ? "Now \(next.title) — waiting for the Mac" : "Now \(next.title) — open to refresh")
+        guard state.upcoming.first != nil else {
+            return Text(state.isPaused ? "Paused" : "Last phase of the session")
         }
         let rest = state.upcoming.map { "\($0.title) \($0.startsAt.formatted(date: .omitted, time: .shortened))" }
         return Text("Then " + rest.joined(separator: " · "))

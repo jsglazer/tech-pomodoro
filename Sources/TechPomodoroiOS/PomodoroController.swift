@@ -60,6 +60,7 @@ final class PomodoroController: ObservableObject {
     /// arrive in a background launch and must still reach the Macs.
     private let mirrorReceiver = MirrorReceiver()
     private var mirrorSubscription: AnyCancellable?
+    private var ownChannelSubscription: AnyCancellable?
 
     init(
         dateProvider: DateProvider = .system,
@@ -101,9 +102,15 @@ final class PomodoroController: ObservableObject {
             guard let self, content != self.mirror else { return }
             self.mirror = content
             // The Mac wins: this iPhone's own Live Activity steps aside, and comes back when it goes idle.
-            self.liveActivity.sync(with: self.state, at: self.dateProvider.now(), suppressed: content != nil)
+            self.liveActivity.sync(with: self.state, at: self.dateProvider.now(), suppressed: content != nil, channelID: self.mirrorReceiver.ownChannelID)
+        }
+        ownChannelSubscription = mirrorReceiver.$ownChannelID.dropFirst().sink { [weak self] channelID in
+            guard let self else { return }
+            // A Mac made this iPhone's channel: the activity moves onto it, so the Mac's pushes reach it.
+            self.liveActivity.sync(with: self.state, at: self.dateProvider.now(), suppressed: self.mirror != nil, channelID: channelID)
         }
         mirrorReceiver.setEnabled(settings.mirrorEnabled)
+        mirrorReceiver.ownTimerChanged(state, at: now)
     }
 
     static func live() -> PomodoroController {
@@ -196,6 +203,7 @@ final class PomodoroController: ObservableObject {
         }
         if old.mirrorEnabled != newSettings.mirrorEnabled {
             mirrorReceiver.setEnabled(newSettings.mirrorEnabled)
+            mirrorReceiver.ownTimerChanged(state, at: dateProvider.now())
         }
     }
 
@@ -280,6 +288,7 @@ final class PomodoroController: ObservableObject {
     func settle() async {
         await scheduler.settle()
         await liveActivity.settle()
+        await mirrorReceiver.settle()
     }
 
     // MARK: - Schedule side effects
@@ -288,7 +297,9 @@ final class PomodoroController: ObservableObject {
     private func scheduleDidChange(at now: Date) {
         snapshotStore?.save(state)
         scheduler.replan(for: state)
-        liveActivity.sync(with: state, at: now, suppressed: mirror != nil)
+        liveActivity.sync(with: state, at: now, suppressed: mirror != nil, channelID: mirrorReceiver.ownChannelID)
+        // The Macs show this timer too, and push its boundaries while this app is suspended.
+        mirrorReceiver.ownTimerChanged(state, at: now)
     }
 
     private func requestNotificationAuthorization() async {

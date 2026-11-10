@@ -28,6 +28,10 @@ public struct MirrorContent: Codable, Hashable, Sendable {
     public var tintHex: String
     /// The Mac this content came from; nil for the iPhone's own timer.
     public var mirroredFrom: String?
+    /// The phase that follows a running one, drawn in full so the Live Activity can move on by itself
+    /// once the current countdown runs out and nothing has updated it. Nil while paused, and when the
+    /// session ends at this boundary. Optional, so content from an older build still decodes.
+    public var nextPhase: MirrorNextPhase?
 
     public init(
         phaseTitle: String,
@@ -38,7 +42,8 @@ public struct MirrorContent: Codable, Hashable, Sendable {
         progressLine: String,
         upcoming: [MirrorUpcoming],
         tintHex: String,
-        mirroredFrom: String? = nil
+        mirroredFrom: String? = nil,
+        nextPhase: MirrorNextPhase? = nil
     ) {
         self.phaseTitle = phaseTitle
         self.isPaused = isPaused
@@ -49,6 +54,7 @@ public struct MirrorContent: Codable, Hashable, Sendable {
         self.upcoming = upcoming
         self.tintHex = tintHex
         self.mirroredFrom = mirroredFrom
+        self.nextPhase = nextPhase
     }
 
     /// Paused content holds a still readout; running content counts down to `phaseEndsAt`.
@@ -62,6 +68,23 @@ public struct MirrorContent: Codable, Hashable, Sendable {
         let total = phaseEndsAt.timeIntervalSince(phaseStartedAt)
         guard total > 0 else { return 1 }
         return min(1, max(0, (total - remaining(at: now)) / total))
+    }
+}
+
+/// The phase after the current one, with everything the Live Activity needs to count it down.
+public struct MirrorNextPhase: Codable, Hashable, Sendable {
+    public var title: String
+    public var startsAt: Date
+    public var endsAt: Date
+    public var progressLine: String
+    public var tintHex: String
+
+    public init(title: String, startsAt: Date, endsAt: Date, progressLine: String, tintHex: String) {
+        self.title = title
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+        self.progressLine = progressLine
+        self.tintHex = tintHex
     }
 }
 
@@ -90,6 +113,30 @@ public enum MirrorContentBuilder {
         at now: Date,
         primaryHex: String = MirrorContentBuilder.primaryHex,
         mirroredFrom: String? = nil
+    ) -> MirrorContent? {
+        guard var content = flatContent(for: state, at: now, primaryHex: primaryHex, mirroredFrom: mirroredFrom) else { return nil }
+        // The phase after this one, from the reducer itself, so long breaks, session rests and the
+        // end of the session are exactly what the timer will do.
+        if state.activity == .running, let end = state.phaseEndsAt {
+            let after = PomodoroReducer.reduce(state, .tick, end)
+            if after.activity == .running, let next = flatContent(for: after, at: end, primaryHex: primaryHex, mirroredFrom: nil) {
+                content.nextPhase = MirrorNextPhase(
+                    title: next.phaseTitle,
+                    startsAt: next.phaseStartedAt,
+                    endsAt: next.phaseEndsAt,
+                    progressLine: next.progressLine,
+                    tintHex: next.tintHex
+                )
+            }
+        }
+        return content
+    }
+
+    private static func flatContent(
+        for state: PomodoroState,
+        at now: Date,
+        primaryHex: String,
+        mirroredFrom: String?
     ) -> MirrorContent? {
         guard state.activity != .idle else { return nil }
         let settings = state.settings
@@ -120,9 +167,10 @@ public enum MirrorContentBuilder {
     }
 
     /// When the activity should be marked out of date: a little after a running phase ends, never
-    /// while paused.
-    public static func staleDate(for content: MirrorContent) -> Date? {
-        content.isPaused ? nil : content.phaseEndsAt.addingTimeInterval(staleGrace)
+    /// while paused. The iPhone's own activity passes a grace of zero: nothing else is due to update
+    /// it at the boundary, so it should move on to `nextPhase` the moment the countdown runs out.
+    public static func staleDate(for content: MirrorContent, grace: TimeInterval = staleGrace) -> Date? {
+        content.isPaused ? nil : content.phaseEndsAt.addingTimeInterval(grace)
     }
 }
 
@@ -169,7 +217,7 @@ public enum APNsEnvironment: String, Codable, Sendable, CaseIterable {
 public struct MirrorPhone: Codable, Equatable, Sendable {
     public var deviceID: String
     public var name: String
-    /// The iPhone's own "Show Mac timer" switch.
+    /// The iPhone's own "Mirror timer with Mac" switch.
     public var mirroringEnabled: Bool
     /// Hex push-to-start token for `PomodoroActivityAttributes`.
     public var pushToStartToken: String?
@@ -203,7 +251,8 @@ public struct MirrorPhone: Codable, Equatable, Sendable {
     }
 }
 
-/// A Mac's timer, as it last changed. Written on every change the iPhone must hear about.
+/// A device's timer, as it last changed. A Mac writes one (`mac-<id>`) on every change the iPhone must
+/// hear about; an iPhone writes one (`iphone-<id>`) on every change of its own timer, for the Macs.
 public struct MirrorTimer: Codable, Equatable, Sendable {
     public var deviceID: String
     public var name: String
@@ -211,13 +260,107 @@ public struct MirrorTimer: Codable, Equatable, Sendable {
     public var changedAt: Date
     /// Nil when idle.
     public var content: MirrorContent?
+    /// The timer itself, so a reader can run it forward through boundaries the writer was not awake
+    /// to record. An iPhone sets it: it is suspended at most boundaries. Nil from a Mac.
+    public var state: MirrorTimerState?
 
-    public init(deviceID: String, name: String, activity: PomodoroState.Activity, changedAt: Date, content: MirrorContent?) {
+    public init(deviceID: String, name: String, activity: PomodoroState.Activity, changedAt: Date, content: MirrorContent?, state: MirrorTimerState? = nil) {
         self.deviceID = deviceID
         self.name = name
         self.activity = activity
         self.changedAt = changedAt
         self.content = content
+        self.state = state
+    }
+}
+
+/// The schedule a timer runs on: the settings that decide where its boundaries fall and how its
+/// phases are tinted. Carried with an iPhone's timer so a Mac with different settings still runs the
+/// iPhone's timer exactly as the iPhone does.
+public struct MirrorSchedule: Codable, Equatable, Sendable {
+    public var workMinutes: Int
+    public var restMinutes: Int
+    public var repsPerCycle: Int
+    public var longBreakMinutes: Int
+    public var cyclesPerSession: Int
+    public var sessionRestMinutes: Int
+    public var repeatSession: Bool
+    public var useRestColor: Bool
+    public var restColorHex: String
+
+    public init(_ settings: PomodoroSettings) {
+        workMinutes = settings.workMinutes
+        restMinutes = settings.restMinutes
+        repsPerCycle = settings.repsPerCycle
+        longBreakMinutes = settings.longBreakMinutes
+        cyclesPerSession = settings.cyclesPerSession
+        sessionRestMinutes = settings.sessionRestMinutes
+        repeatSession = settings.repeatSession
+        useRestColor = settings.useRestColor
+        restColorHex = settings.restColorHex
+    }
+
+    /// `settings` with this schedule in place; everything else (alerts, menu bar look) is kept.
+    public func applied(to settings: PomodoroSettings) -> PomodoroSettings {
+        var s = settings
+        s.workMinutes = workMinutes
+        s.restMinutes = restMinutes
+        s.repsPerCycle = repsPerCycle
+        s.longBreakMinutes = longBreakMinutes
+        s.cyclesPerSession = cyclesPerSession
+        s.sessionRestMinutes = sessionRestMinutes
+        s.repeatSession = repeatSession
+        s.useRestColor = useRestColor
+        s.restColorHex = restColorHex
+        return s
+    }
+}
+
+/// A `PomodoroState`'s stored fields plus its schedule, as plain JSON for CloudKit.
+public struct MirrorTimerState: Codable, Equatable, Sendable {
+    public var activity: PomodoroState.Activity
+    public var phase: Phase
+    public var phaseEndsAt: Date?
+    public var remainingWhenPaused: TimeInterval?
+    public var phaseStartedAt: Date?
+    public var phaseDuration: TimeInterval
+    public var completedRepsInCycle: Int
+    public var completedCyclesInSession: Int
+    public var completedSessions: Int
+    public var schedule: MirrorSchedule
+
+    public init(_ state: PomodoroState) {
+        activity = state.activity
+        phase = state.phase
+        phaseEndsAt = state.phaseEndsAt
+        remainingWhenPaused = state.remainingWhenPaused
+        phaseStartedAt = state.phaseStartedAt
+        phaseDuration = state.phaseDuration
+        completedRepsInCycle = state.completedRepsInCycle
+        completedCyclesInSession = state.completedCyclesInSession
+        completedSessions = state.completedSessions
+        schedule = MirrorSchedule(state.settings)
+    }
+
+    /// The timer under the reader's own `settings`, with this timer's schedule put in. Nil when the
+    /// fields are inconsistent (running with no end, paused with no remainder).
+    public func restore(onto settings: PomodoroSettings) -> PomodoroState? {
+        switch activity {
+        case .running where phaseEndsAt == nil: return nil
+        case .paused where remainingWhenPaused == nil: return nil
+        default: break
+        }
+        var state = PomodoroState(settings: schedule.applied(to: settings))
+        state.activity = activity
+        state.phase = phase
+        state.phaseEndsAt = phaseEndsAt
+        state.remainingWhenPaused = remainingWhenPaused
+        state.phaseStartedAt = phaseStartedAt
+        state.phaseDuration = phaseDuration
+        state.completedRepsInCycle = completedRepsInCycle
+        state.completedCyclesInSession = completedCyclesInSession
+        state.completedSessions = completedSessions
+        return state
     }
 }
 
@@ -232,13 +375,17 @@ public struct MirrorChannel: Codable, Equatable, Sendable {
     public var lastContent: MirrorContent?
     /// APNs ignores an update whose `timestamp` is not newer than the one before, so it only grows.
     public var lastTimestamp: Int
+    /// On an iPhone's own channel: the last of its timer's phase boundaries a Mac pushed, so a second
+    /// Mac awake at the same boundary does not push it again. Unused on the Mac-timer channel.
+    public var lastBoundary: Date?
 
-    public init(environment: APNsEnvironment, channelID: String, startedPhones: [String: Date] = [:], lastContent: MirrorContent? = nil, lastTimestamp: Int = 0) {
+    public init(environment: APNsEnvironment, channelID: String, startedPhones: [String: Date] = [:], lastContent: MirrorContent? = nil, lastTimestamp: Int = 0, lastBoundary: Date? = nil) {
         self.environment = environment
         self.channelID = channelID
         self.startedPhones = startedPhones
         self.lastContent = lastContent
         self.lastTimestamp = lastTimestamp
+        self.lastBoundary = lastBoundary
     }
 
     /// The next push timestamp: now in whole seconds, but always past the previous one.
@@ -319,6 +466,60 @@ public enum MirrorArbiter {
     }
 }
 
+// MARK: - The iPhone's own timer, seen from a Mac
+
+/// Which iPhone timer a Mac shows, display only, while its own timer is idle.
+///
+/// An iPhone writes its timer when it changes, but it is suspended at most phase boundaries, so the
+/// record is usually behind. The Mac restores the timer and runs it forward with the reducer, exactly
+/// as the iPhone does when it next wakes.
+public enum PhoneTimerArbiter {
+
+    /// A paused iPhone timer counts this long after it last changed, as a paused Mac timer does.
+    public static let pausedLifetime: TimeInterval = MirrorArbiter.pausedLifetime
+    /// A running iPhone timer that has not been touched for a day is taken to be abandoned (the app
+    /// deleted, the phone lost) even under `repeatSession`.
+    public static let runningLifetime: TimeInterval = 24 * 60 * 60
+
+    public struct Shown: Equatable, Sendable {
+        public let timer: MirrorTimer
+        /// Caught up to `now`, with no pending effects or records.
+        public let state: PomodoroState
+    }
+
+    /// The iPhone timer to show at `now`: of the ones still running or paused, the one that changed
+    /// most recently. Nil when there is none.
+    public static func shown(_ timers: [MirrorTimer], settings: PomodoroSettings, now: Date) -> Shown? {
+        timers
+            .compactMap { timer -> Shown? in
+                guard timer.activity != .idle, let state = caughtUp(timer, settings: settings, now: now) else { return nil }
+                return Shown(timer: timer, state: state)
+            }
+            .max { lhs, rhs in
+                lhs.timer.changedAt == rhs.timer.changedAt
+                    ? lhs.timer.deviceID < rhs.timer.deviceID
+                    : lhs.timer.changedAt < rhs.timer.changedAt
+            }
+    }
+
+    /// The timer run forward to `now`; nil once it has gone idle or out of date.
+    public static func caughtUp(_ timer: MirrorTimer, settings: PomodoroSettings, now: Date) -> PomodoroState? {
+        guard let restored = timer.state?.restore(onto: settings) else { return nil }
+        let age = now.timeIntervalSince(timer.changedAt)
+        switch restored.activity {
+        case .idle: return nil
+        case .paused where age >= pausedLifetime: return nil
+        case .running where age >= runningLifetime: return nil
+        default: break
+        }
+        var state = PomodoroReducer.reduce(restored, .tick, now)
+        guard state.activity != .idle else { return nil }
+        state.pendingEffects = []
+        state.pendingRecords = []
+        return state
+    }
+}
+
 // MARK: - What to push
 
 public enum MirrorPushPlanner {
@@ -337,6 +538,15 @@ public enum MirrorPushPlanner {
         public var channel: MirrorChannel
 
         public var isEmpty: Bool { starts.isEmpty && broadcast == nil }
+    }
+
+    /// The push a Mac makes on an iPhone's own channel when that iPhone's timer crosses `boundary`
+    /// while the iPhone is suspended: the new phase, or an end when the session finished there. Nil
+    /// when this boundary, or a later one, has already been pushed by some Mac.
+    public static func ownBroadcast(desired: MirrorContent?, boundary: Date, channel: MirrorChannel) -> Broadcast? {
+        if let last = channel.lastBoundary, last >= boundary { return nil }
+        guard let desired else { return .end(channel.lastContent) }
+        return desired == channel.lastContent ? nil : .update(desired)
     }
 
     /// Decides the pushes that bring every iPhone in `channel.environment` to `desired` (nil: no Mac
@@ -398,13 +608,13 @@ public enum APNsPayload {
         return try serialize(aps)
     }
 
-    public static func update(content: MirrorContent, timestamp: Int) throws -> Data {
+    public static func update(content: MirrorContent, timestamp: Int, staleGrace: TimeInterval = MirrorContentBuilder.staleGrace) throws -> Data {
         var aps: [String: Any] = [
             "timestamp": timestamp,
             "event": "update",
             "content-state": try contentState(content)
         ]
-        if let stale = MirrorContentBuilder.staleDate(for: content) {
+        if let stale = MirrorContentBuilder.staleDate(for: content, grace: staleGrace) {
             aps["stale-date"] = Int(stale.timeIntervalSince1970)
         }
         return try serialize(aps)

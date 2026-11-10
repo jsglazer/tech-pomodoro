@@ -138,7 +138,8 @@ private struct MirrorSettingsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle("Mirror timer to iPhone", isOn: controller.bind(\.mirrorEnabled))
+            Toggle("Mirror timer with iPhone", isOn: controller.bind(\.mirrorEnabled))
+                .help("This Mac's timer shows on the iPhone's Lock Screen, and the iPhone's timer shows here while this Mac's is idle. Display only, both ways.")
                 .toggleStyle(.switch)
             Text(mirror.status.label)
                 .font(.caption2)
