@@ -8,20 +8,40 @@ struct PaperPanel: View {
     @State private var note = ""
     @State private var pendingTag: PaperTag?
     @State private var confirmingOtherDevice = false
+    /// The kind picked before any class, used when a class is chosen.
+    @State private var chosenKind: PaperKind = .read
     @FocusState private var noteFocused: Bool
 
     private var tag: PaperTag? { controller.state.paperTag }
+    private var kind: PaperKind { tag?.kind ?? chosenKind }
     private var classes: [String] { controller.settings.paperClasses.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                SectionLabel("PAPER")
-                Spacer()
-                if tag != nil {
-                    Text(statusText)
-                        .font(.caption)
-                        .foregroundStyle(Color.tpPrimary)
+            // The kind, always one tap away: Read, Write, Practice, Watch.
+            HStack(spacing: 6) {
+                ForEach(PaperKind.allCases) { option in
+                    let selected = option == kind
+                    Button {
+                        select(option)
+                    } label: {
+                        Text(option.title)
+                            .font(.subheadline.weight(selected ? .semibold : .regular))
+                            .foregroundStyle(selected ? Color.tpBackground : Color.tpPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background {
+                                if selected {
+                                    RoundedRectangle(cornerRadius: 8).fill(tag == nil ? Color.tpDimmed : Color.tpPrimary)
+                                } else {
+                                    RoundedRectangle(cornerRadius: 8).stroke(Color.tpRule, lineWidth: 1)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
 
@@ -39,19 +59,14 @@ struct PaperPanel: View {
                 }
                 Spacer()
                 if tag != nil {
+                    Text(statusText)
+                        .font(.caption)
+                        .foregroundStyle(Color.tpPrimary)
                     Button("Clear", role: .destructive) { apply(nil) }
                 }
             }
 
-            if let tag {
-                Picker("Kind", selection: Binding(
-                    get: { tag.kind },
-                    set: { kind in apply(PaperTag(className: tag.className, kind: kind, note: tag.note)) }
-                )) {
-                    ForEach(PaperKind.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-
+            if tag != nil {
                 TextField("Note (optional)", text: $note)
                     .textFieldStyle(.roundedBorder)
                     .focused($noteFocused)
@@ -80,9 +95,15 @@ struct PaperPanel: View {
         return state.phase == .work ? "logging" : "next Work"
     }
 
-    /// Choosing a class picks Read unless a kind was already chosen.
+    /// Choosing a class keeps the kind already selected (Read until another is picked).
     private func choose(className: String) {
-        apply(PaperTag(className: className, kind: tag?.kind ?? .read, note: tag?.note))
+        apply(PaperTag(className: className, kind: kind, note: tag?.note))
+    }
+
+    private func select(_ option: PaperKind) {
+        chosenKind = option
+        guard let tag, tag.kind != option else { return }
+        apply(PaperTag(className: tag.className, kind: option, note: tag.note))
     }
 
     private func commitNote() {

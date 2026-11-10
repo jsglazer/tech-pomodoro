@@ -9,23 +9,39 @@ struct PaperControl: View {
     @State private var note = ""
     @State private var pendingTag: PaperTag?
     @State private var confirmingOtherDevice = false
+    /// The kind picked before any class, used when a class is chosen.
+    @State private var chosenKind: PaperKind = .read
     @FocusState private var noteFocused: Bool
 
     private var tag: PaperTag? { controller.state.paperTag }
+    private var kind: PaperKind { tag?.kind ?? chosenKind }
     private var classes: [String] { controller.settings.paperClasses.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("PAPER")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.2)
-                    .foregroundStyle(Color.tpDimmed)
-                Spacer()
-                if tag != nil {
-                    Text(controller.state.activity == .idle ? "from next Start" : (controller.state.phase == .work ? "logging" : "next Work"))
-                        .font(.system(size: 9))
-                        .foregroundStyle(Color.tpPrimary)
+            // The kind, always one click away: Read, Write, Practice, Watch.
+            HStack(spacing: 4) {
+                ForEach(PaperKind.allCases) { option in
+                    let selected = option == kind
+                    Button {
+                        select(option)
+                    } label: {
+                        Text(option.title)
+                            .font(.system(size: 11, weight: selected ? .semibold : .regular))
+                            .foregroundStyle(selected ? Color.tpBackground : Color.tpPrimary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .background {
+                                if selected {
+                                    RoundedRectangle(cornerRadius: 5).fill(tag == nil ? Color.tpDimmed : Color.tpPrimary)
+                                } else {
+                                    RoundedRectangle(cornerRadius: 5).stroke(Color.tpRule, lineWidth: 1)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(tag == nil ? "\(option.title) — used when you pick a class" : "Paper kind: \(option.title)")
                 }
             }
 
@@ -49,22 +65,19 @@ struct PaperControl: View {
                 Spacer()
 
                 if tag != nil {
+                    Text(controller.state.activity == .idle ? "from next Start" : (controller.state.phase == .work ? "logging" : "next Work"))
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.tpPrimary)
+                }
+
+                if tag != nil {
                     Button("Clear") { apply(nil) }
                         .buttonStyle(.borderless)
                         .help("Stop tagging Work as paper time")
                 }
             }
 
-            if let tag {
-                Picker("", selection: Binding(
-                    get: { tag.kind },
-                    set: { kind in apply(PaperTag(className: tag.className, kind: kind, note: tag.note)) }
-                )) {
-                    ForEach(PaperKind.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-
+            if tag != nil {
                 TextField("Note (optional)", text: $note)
                     .textFieldStyle(.roundedBorder)
                     .focused($noteFocused)
@@ -88,9 +101,15 @@ struct PaperControl: View {
         }
     }
 
-    /// Choosing a class picks Read unless a kind was already chosen.
+    /// Choosing a class keeps the kind already selected (Read until another is picked).
     private func choose(className: String) {
-        apply(PaperTag(className: className, kind: tag?.kind ?? .read, note: tag?.note))
+        apply(PaperTag(className: className, kind: kind, note: tag?.note))
+    }
+
+    private func select(_ option: PaperKind) {
+        chosenKind = option
+        guard let tag, tag.kind != option else { return }
+        apply(PaperTag(className: tag.className, kind: option, note: tag.note))
     }
 
     private func commitNote() {
