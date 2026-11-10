@@ -301,7 +301,7 @@ struct FocusHistoryTests {
                                 projectSeconds: [:], supportSeconds: 0, distractionSeconds: 15, driftAlerts: 1)
         )
         let row = AnalyticsExporter.csv(records: [record]).split(separator: "\n")[1]
-        #expect(row.hasSuffix(#""Classes/A, B","Classes/A, B/T",0.750,2,15,1"#))
+        #expect(row.hasSuffix(#""Classes/A, B","Classes/A, B/T",0.750,2,15,1,,,,,,"#))
     }
 
     @Test("aw-server events parse, microsecond timestamps included")

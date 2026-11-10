@@ -18,6 +18,13 @@ struct SessionSnapshot: Codable, Equatable {
     var completedRepsInCycle: Int
     var completedCyclesInSession: Int
     var completedSessions: Int
+    /// The paper tag and the current Work record's stretches. Optional, so a snapshot written by an
+    /// older build still restores.
+    var paperTag: PaperTag?
+    var workRecordStartedAt: Date?
+    var workSpans: [DateInterval]?
+    var workSpanStartedAt: Date?
+    var workSecondsRecorded: Int?
 
     init(_ state: PomodoroState) {
         activity = state.activity.rawValue
@@ -29,6 +36,11 @@ struct SessionSnapshot: Codable, Equatable {
         completedRepsInCycle = state.completedRepsInCycle
         completedCyclesInSession = state.completedCyclesInSession
         completedSessions = state.completedSessions
+        paperTag = state.paperTag
+        workRecordStartedAt = state.workRecordStartedAt
+        workSpans = state.workSpans
+        workSpanStartedAt = state.workSpanStartedAt
+        workSecondsRecorded = state.workSecondsRecorded
     }
 
     /// The state this snapshot describes, under `settings`. Nil when the snapshot is inconsistent —
@@ -50,6 +62,14 @@ struct SessionSnapshot: Codable, Equatable {
         state.completedRepsInCycle = completedRepsInCycle
         state.completedCyclesInSession = completedCyclesInSession
         state.completedSessions = completedSessions
+        state.paperTag = paperTag
+        if phase == .work {
+            // A snapshot from before paper time: the Work record began with the phase.
+            state.workRecordStartedAt = workRecordStartedAt ?? phaseStartedAt
+            state.workSpans = workSpans ?? []
+            state.workSpanStartedAt = workSpans == nil ? (activity == .running ? phaseStartedAt : nil) : workSpanStartedAt
+            state.workSecondsRecorded = workSecondsRecorded ?? 0
+        }
         return state
     }
 }

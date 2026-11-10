@@ -152,8 +152,8 @@ struct PersistenceTests {
         #expect(lines.count == 3)
         #expect(lines[0] == AnalyticsExporter.csvHeader)
         #expect(lines[1].contains("work,"))
-        #expect(lines[1].hasSuffix("1500,true,,,,,,"))
-        #expect(lines[2].hasSuffix("420,false,,,,,,"))
+        #expect(lines[1].hasSuffix("1500,true,,,,,,,,,,,,"))
+        #expect(lines[2].hasSuffix("420,false,,,,,,,,,,,,"))
     }
 
     @Test("An empty export is a header alone, not an error")

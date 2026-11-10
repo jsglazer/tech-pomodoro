@@ -4,7 +4,7 @@ import Foundation
 /// of their own: the shell decides where the returned bytes go.
 public enum AnalyticsExporter {
 
-    public static let csvHeader = "id,kind,started_at,elapsed_seconds,completed,focus_area,focus_task,focus_share,focus_switches,focus_distraction_seconds,focus_drift_alerts"
+    public static let csvHeader = "id,kind,started_at,elapsed_seconds,completed,focus_area,focus_task,focus_share,focus_switches,focus_distraction_seconds,focus_drift_alerts,paper_class,paper_kind,paper_note,paper_seconds,paper_overlap_seconds,manual"
 
     public static func csv(records: [IntervalRecord]) -> String {
         let formatter = ISO8601DateFormatter()
@@ -20,7 +20,13 @@ public enum AnalyticsExporter {
                 record.focus?.focusShare.map { String(format: "%.3f", $0) } ?? "",
                 record.focus.map { String($0.switches) } ?? "",
                 record.focus.map { String($0.distractionSeconds) } ?? "",
-                record.focus.map { String($0.driftAlerts) } ?? ""
+                record.focus.map { String($0.driftAlerts) } ?? "",
+                field(record.paper?.className),
+                record.paper?.kind.title ?? "",
+                field(record.paper?.note),
+                record.paper.map { String(Int($0.seconds.rounded())) } ?? "",
+                record.focus?.paperOverlapSeconds.map(String.init) ?? "",
+                record.isManual ? "true" : ""
             ].joined(separator: ",")
         }
         return ([csvHeader] + rows).joined(separator: "\n") + "\n"

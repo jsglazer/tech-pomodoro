@@ -52,12 +52,15 @@ public final class CloudSync: ObservableObject {
     public enum Change {
         case history([IntervalRecord])
         case settings(PomodoroSettings)
+        /// Paper corrections arrived; the full merged list.
+        case corrections([PaperCorrection])
     }
 
     @Published public private(set) var status: CloudSyncStatus = .off
 
     private let intervalStore: any IntervalStore
     private let settingsStore: any SettingsStoring
+    private let correctionStore: (any PaperCorrectionStoring)?
     private let defaults: UserDefaults
     private let stateURL: URL?
     private let calendar: Calendar
@@ -73,11 +76,14 @@ public final class CloudSync: ObservableObject {
         /// Ids of history records known to be on the server, so a start uploads exactly the ones
         /// written while sync was off, or before it came up.
         static let uploadedIntervals = "sync.uploadedIntervals"
+        /// The same, for paper corrections.
+        static let uploadedCorrections = "sync.uploadedCorrections"
     }
 
     public init(
         intervalStore: any IntervalStore,
         settingsStore: any SettingsStoring,
+        correctionStore: (any PaperCorrectionStoring)? = nil,
         defaults: UserDefaults = .standard,
         stateURL: URL?,
         calendar: Calendar = .current,
@@ -86,6 +92,7 @@ public final class CloudSync: ObservableObject {
     ) {
         self.intervalStore = intervalStore
         self.settingsStore = settingsStore
+        self.correctionStore = correctionStore
         self.defaults = defaults
         self.stateURL = stateURL
         self.calendar = calendar
@@ -123,6 +130,7 @@ public final class CloudSync: ObservableObject {
         let host = CloudSyncEngineHost(owner: self, containerIdentifier: Self.containerIdentifier)
         self.host = host
         let unsent = unsentIntervalIDs()
+        let unsentCorrections = unsentCorrectionIDs()
         // The settings record has never reached the server (first sync, or every earlier attempt
         // failed — say, before the schema was deployed), so offer it again.
         let settingsUnsent = defaults.data(forKey: Key.settingsSystemFields) == nil
@@ -130,6 +138,7 @@ public final class CloudSync: ObservableObject {
             let ready = await host.start(
                 stateSerialization: saved,
                 pendingIntervalIDs: unsent,
+                pendingCorrectionIDs: unsentCorrections,
                 createZone: saved == nil,
                 sendSettings: saved == nil || settingsUnsent
             )
@@ -168,6 +177,13 @@ public final class CloudSync: ObservableObject {
         Task { await host.enqueue(intervalIDs: ids) }
     }
 
+    /// Paper corrections were written locally.
+    public func correctionsAdded(_ corrections: [PaperCorrection]) {
+        guard let host, !corrections.isEmpty else { return }
+        let ids = corrections.map(\.id)
+        Task { await host.enqueue(correctionIDs: ids) }
+    }
+
     /// The user changed a setting. Only a change to a field that syncs is stamped and pushed.
     public func settingsChanged(from old: PomodoroSettings, to new: PomodoroSettings, at now: Date = Date()) {
         guard SyncMerge.syncedFieldsDiffer(old, new) else { return }
@@ -185,13 +201,22 @@ public final class CloudSync: ObservableObject {
     }
 
     /// Everything the engine needs to build the records it is about to send.
-    func outgoing(intervalIDs: [UUID], includeSettings: Bool) -> CloudSyncOutgoing {
+    func outgoing(intervalIDs: [UUID], correctionIDs: [UUID] = [], includeSettings: Bool) -> CloudSyncOutgoing {
         let wanted = Set(intervalIDs)
         var intervals: [UUID: CloudSyncOutgoing.Interval] = [:]
         if !wanted.isEmpty, let history = try? intervalStore.load() {
             for record in history where wanted.contains(record.id) {
                 if let payload = try? record.syncPayload() {
                     intervals[record.id] = .init(payload: payload, startedAt: record.startedAt)
+                }
+            }
+        }
+        var corrections: [UUID: CloudSyncOutgoing.Interval] = [:]
+        let wantedCorrections = Set(correctionIDs)
+        if !wantedCorrections.isEmpty, let correctionStore {
+            for correction in correctionStore.load() where wantedCorrections.contains(correction.id) {
+                if let payload = try? correction.syncPayload() {
+                    corrections[correction.id] = .init(payload: payload, startedAt: correction.modifiedAt)
                 }
             }
         }
@@ -202,12 +227,48 @@ public final class CloudSync: ObservableObject {
                 settings = .init(payload: payload, modifiedAt: synced.modifiedAt, systemFields: defaults.data(forKey: Key.settingsSystemFields))
             }
         }
-        return CloudSyncOutgoing(intervals: intervals, settings: settings)
+        return CloudSyncOutgoing(intervals: intervals, corrections: corrections, settings: settings)
     }
 
     /// Every record id in the local history, for a fresh upload after the zone or account reset.
     func allIntervalIDs() -> [UUID] {
         ((try? intervalStore.load()) ?? []).map(\.id)
+    }
+
+    /// Every local paper correction id.
+    func allCorrectionIDs() -> [UUID] {
+        (correctionStore?.load() ?? []).map(\.id)
+    }
+
+    private func unsentCorrectionIDs() -> [UUID] {
+        let uploaded = Set(defaults.stringArray(forKey: Key.uploadedCorrections) ?? [])
+        return allCorrectionIDs().filter { !uploaded.contains($0.uuidString) }
+    }
+
+    func markCorrectionsUploaded(_ ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        let local = Set(allCorrectionIDs().map(\.uuidString))
+        var uploaded = Set(defaults.stringArray(forKey: Key.uploadedCorrections) ?? [])
+        uploaded.formUnion(ids.map(\.uuidString))
+        uploaded.formIntersection(local)
+        defaults.set(Array(uploaded).sorted(), forKey: Key.uploadedCorrections)
+    }
+
+    /// Corrections fetched from other devices: merged into the local list.
+    func applyFetched(corrections: [PaperCorrection]) {
+        guard !corrections.isEmpty, let correctionStore else { return }
+        let local = correctionStore.load()
+        let merged = PaperHistory.mergeCorrections(local: local, remote: corrections, now: Date(), calendar: calendar)
+        if merged != local {
+            do {
+                try correctionStore.replace(with: merged)
+                onChange(.corrections(merged))
+            } catch {
+                NSLog("tech-pomodoro: could not write synced paper corrections: \(error.localizedDescription)")
+                return
+            }
+        }
+        markCorrectionsUploaded(corrections.map(\.id))
     }
 
     /// Local records not yet known to be on the server.
@@ -278,6 +339,7 @@ public final class CloudSync: ObservableObject {
     func resetForAccountChange() {
         storeSettingsSystemFields(nil)
         defaults.removeObject(forKey: Key.uploadedIntervals)
+        defaults.removeObject(forKey: Key.uploadedCorrections)
         if let stateURL { try? FileManager.default.removeItem(at: stateURL) }
     }
 
@@ -317,5 +379,7 @@ struct CloudSyncOutgoing: Sendable {
     }
 
     let intervals: [UUID: Interval]
+    /// Paper corrections, keyed by correction id; same shape as an interval.
+    var corrections: [UUID: Interval] = [:]
     let settings: Settings?
 }

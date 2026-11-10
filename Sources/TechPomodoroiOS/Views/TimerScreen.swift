@@ -16,6 +16,7 @@ struct TimerScreen: View {
                     VStack(spacing: 24) {
                         MirrorPanel(content: mirror)
                         MirrorUpNextPanel(content: mirror)
+                        PaperPanel(controller: controller)
                     }
                     .frame(maxWidth: 520)
                     .frame(maxWidth: .infinity)
@@ -24,6 +25,7 @@ struct TimerScreen: View {
                     HStack(alignment: .top, spacing: 32) {
                         TimerPanel(controller: controller)
                         VStack(spacing: 20) {
+                            PaperPanel(controller: controller)
                             UpNextPanel(state: controller.state)
                             AnalyticsPanel(analytics: controller.analytics)
                         }
@@ -33,6 +35,7 @@ struct TimerScreen: View {
                 } else {
                     VStack(spacing: 24) {
                         TimerPanel(controller: controller)
+                        PaperPanel(controller: controller)
                         UpNextPanel(state: controller.state)
                     }
                     .padding(20)
@@ -53,10 +56,17 @@ private struct TimerPanel: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Text(state.activity == .idle ? "READY" : state.phase.title.uppercased())
+            Text(state.activity == .idle ? "READY" : (state.phase == .work && state.paperTag != nil ? "PAPER" : state.phase.title.uppercased()))
                 .font(.system(size: 13, weight: .semibold))
                 .tracking(1.6)
                 .foregroundStyle(Color.tpDimmed)
+
+            if let tag = state.paperTag {
+                Label(tag.label + (tag.note.map { " · \($0)" } ?? ""), systemImage: "book")
+                    .font(.subheadline)
+                    .foregroundStyle(state.phase == .work && state.activity != .idle ? Color.tpPrimary : Color.tpDimmed)
+                    .lineLimit(1)
+            }
 
             // Once a second only for the ring and the threshold colour; the digits themselves are a
             // system-driven `Text(timerInterval:)` and need no refresh from here.
@@ -149,7 +159,7 @@ private struct MirrorPanel: View {
             }
             .frame(maxWidth: 320)
 
-            Text(content.progressLine)
+            Text(content.paperLine.map { "Paper · \($0)" } ?? content.progressLine)
                 .font(.subheadline)
                 .foregroundStyle(Color.tpDimmed)
 

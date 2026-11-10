@@ -12,6 +12,7 @@ struct PopoverRootView: View {
         case settings = "Settings"
         case sound = "Sound"
         case focus = "Focus"
+        case paper = "Paper"
 
         var id: String { rawValue }
     }
@@ -47,6 +48,7 @@ struct PopoverRootView: View {
                 case .settings: SettingsTabView(controller: controller)
                 case .sound: SoundTabView(controller: controller)
                 case .focus: FocusTabView(controller: controller)
+                case .paper: PaperTabView(controller: controller)
                 }
             }
             .padding(12)
@@ -74,7 +76,8 @@ struct PopoverRootView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
-        .frame(width: 320)
+        // Wide enough for six tabs without truncating their names.
+        .frame(width: 360)
         .background(Color.tpBackground)
         .foregroundStyle(Color.tpPrimary)
         .preferredColorScheme(.dark)
@@ -101,10 +104,18 @@ private struct CountdownHeader: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Text(state.activity == .idle ? "Ready" : state.phase.title.uppercased())
+            Text(state.activity == .idle ? "Ready" : (state.phase == .work && state.paperTag != nil ? "PAPER" : state.phase.title.uppercased()))
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(1.4)
                 .foregroundStyle(Color.tpDimmed)
+
+            if let tag = state.paperTag {
+                Label(tag.label + (tag.note.map { " · \($0)" } ?? ""), systemImage: "book")
+                    .font(.caption)
+                    .foregroundStyle(state.phase == .work && state.activity != .idle ? Color.tpPrimary : Color.tpDimmed)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
 
             if let phone {
                 Label("On \(phone.phoneName) · display only", systemImage: "iphone")

@@ -52,6 +52,19 @@ public struct PomodoroState: Sendable, Equatable {
 
     public var settings: PomodoroSettings
 
+    /// The paper tag, when the Work is paper time. Per device; cleared only by `clearPaperTag` or Stop.
+    public var paperTag: PaperTag?
+    /// Where the current Work *record* began. Usually `phaseStartedAt`; later when a paper tag change
+    /// split the interval. Nil outside Work.
+    public var workRecordStartedAt: Date?
+    /// The closed stretches the current Work record has run (a pause ends one).
+    public var workSpans: [DateInterval]
+    /// Start of the stretch running now; nil while paused or outside Work.
+    public var workSpanStartedAt: Date?
+    /// Whole seconds of this Work phase already logged by earlier split records, so the pieces add up
+    /// to exactly what one unsplit record would have logged.
+    public var workSecondsRecorded: Int
+
     /// Effects produced by the most recent reduction only. Each reduction replaces them, so they
     /// never accumulate and the shell cannot replay a stale alert.
     public var pendingEffects: [PomodoroEffect]
@@ -70,6 +83,11 @@ public struct PomodoroState: Sendable, Equatable {
         self.completedSessions = 0
         self.pausedBySleep = false
         self.settings = settings
+        self.paperTag = nil
+        self.workRecordStartedAt = nil
+        self.workSpans = []
+        self.workSpanStartedAt = nil
+        self.workSecondsRecorded = 0
         self.pendingEffects = []
         self.pendingRecords = []
     }
@@ -97,6 +115,17 @@ public struct PomodoroState: Sendable, Equatable {
     public func progress(at now: Date) -> Double {
         guard phaseDuration > 0, activity != .idle else { return 0 }
         return min(1, max(0, elapsedInPhase(at: now) / phaseDuration))
+    }
+
+    /// True while a running or paused Work interval is tagged as paper time.
+    public var isPaperWork: Bool {
+        paperTag != nil && activity != .idle && phase == .work
+    }
+
+    /// The stretches of the current Work record up to `now`, the running one included.
+    public func workSpans(at now: Date) -> [DateInterval] {
+        guard let open = workSpanStartedAt, now > open else { return workSpans }
+        return workSpans + [DateInterval(start: open, end: now)]
     }
 
     /// The rep number being worked, 1-based, for the popover's "Rep 2 of 3" line.

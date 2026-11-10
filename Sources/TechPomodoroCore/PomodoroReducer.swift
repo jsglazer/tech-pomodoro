@@ -20,7 +20,7 @@ public enum PomodoroReducer {
         // Any event other than the sleep/wake pair or a tick means the user (or a settings change)
         // has taken over, so a pending sleep-pause is no longer the sleep's to undo.
         switch event {
-        case .willSleep, .didWake, .tick: break
+        case .willSleep, .didWake, .tick, .setPaperTag, .clearPaperTag: break
         default: s.pausedBySleep = false
         }
 
@@ -87,6 +87,12 @@ public enum PomodoroReducer {
                 }
             }
 
+        case .setPaperTag(let tag):
+            setPaperTag(&s, tag, at: now)
+
+        case .clearPaperTag:
+            setPaperTag(&s, nil, at: now)
+
         case .settingsChanged(let newSettings):
             // The phase in flight keeps the length it started with; the new durations take effect
             // from the next phase boundary.
@@ -115,6 +121,11 @@ public enum PomodoroReducer {
         s.phaseEndsAt = start.addingTimeInterval(s.phaseDuration)
         s.remainingWhenPaused = nil
         s.activity = .running
+        clearWorkRecord(&s)
+        if phase == .work {
+            s.workRecordStartedAt = start
+            s.workSpanStartedAt = start
+        }
     }
 
     private static func pause(_ s: inout PomodoroState, at now: Date) {
@@ -122,6 +133,11 @@ public enum PomodoroReducer {
         s.remainingWhenPaused = s.remaining(at: now)
         s.phaseEndsAt = nil
         s.activity = .paused
+        // A pause ends the running stretch of a Work record.
+        if let open = s.workSpanStartedAt {
+            if now > open { s.workSpans.append(DateInterval(start: open, end: now)) }
+            s.workSpanStartedAt = nil
+        }
     }
 
     private static func resume(_ s: inout PomodoroState, at now: Date) {
@@ -131,16 +147,70 @@ public enum PomodoroReducer {
         s.phaseEndsAt = now.addingTimeInterval(s.remainingWhenPaused ?? 0)
         s.remainingWhenPaused = nil
         s.activity = .running
+        if s.phase == .work, s.workRecordStartedAt != nil { s.workSpanStartedAt = now }
     }
 
     private static func stop(_ s: inout PomodoroState, at now: Date) {
+        // Stop clears the paper tag, idle or not.
+        defer { s.paperTag = nil }
         guard s.activity != .idle else { return }
         // A work interval cut short is still time worked: it is logged as a partial record. Stopping
         // during a rest or a break records nothing.
-        if s.phase == .work, let partial = partialWorkRecord(s, at: now) {
+        if s.phase == .work, let partial = closeWorkRecord(&s, at: now, phaseElapsed: s.elapsedInPhase(at: now), completed: false) {
             s.pendingRecords.append(partial)
         }
         goIdle(&s)
+    }
+
+    /// Sets, changes or clears the paper tag. During Work (running or paused) a change of class or
+    /// kind — or setting or clearing the tag — closes the stretch so far as its own Work record, under
+    /// the tag it ran with, and carries on as a new record; only the record that reaches the end of
+    /// the phase is `completed`, so reps and work time count exactly as without the split. A change
+    /// of note alone is the same sitting and never splits. Outside Work it only sets the tag.
+    private static func setPaperTag(_ s: inout PomodoroState, _ tag: PaperTag?, at now: Date) {
+        let old = s.paperTag
+        guard old != tag else { return }
+        let sameSitting = tag.map { $0.sameSitting(as: old) } ?? false
+        if s.activity != .idle, s.phase == .work, !sameSitting {
+            if let piece = closeWorkRecord(&s, at: now, phaseElapsed: s.elapsedInPhase(at: now), completed: false) {
+                s.pendingRecords.append(piece)
+            }
+            s.workRecordStartedAt = now
+            s.workSpans = []
+            s.workSpanStartedAt = s.activity == .running ? now : nil
+        }
+        s.paperTag = tag
+    }
+
+    /// The record of the current Work stretch, ending at `end`, where `phaseElapsed` is how much of
+    /// the phase has run by then. Only the part not already logged by an earlier split counts. A
+    /// partial record with nothing in it is nil; a completed one is always returned, so the rep counts.
+    private static func closeWorkRecord(
+        _ s: inout PomodoroState,
+        at end: Date,
+        phaseElapsed: TimeInterval,
+        completed: Bool
+    ) -> IntervalRecord? {
+        guard let started = s.workRecordStartedAt ?? s.phaseStartedAt else { return nil }
+        let total = Int(phaseElapsed.rounded())
+        let elapsed = max(0, total - s.workSecondsRecorded)
+        let spans = s.workSpans(at: end)
+        s.workSecondsRecorded = max(s.workSecondsRecorded, total)
+        guard completed || elapsed > 0 else { return nil }
+        return IntervalRecord(
+            kind: .work,
+            startedAt: started,
+            elapsedSeconds: elapsed,
+            completed: completed,
+            paper: s.paperTag.map { PaperSitting(tag: $0, spans: spans) }
+        )
+    }
+
+    private static func clearWorkRecord(_ s: inout PomodoroState) {
+        s.workRecordStartedAt = nil
+        s.workSpans = []
+        s.workSpanStartedAt = nil
+        s.workSecondsRecorded = 0
     }
 
     /// Cuts the current phase short and begins the next one at `now`, running even if the skipped
@@ -150,7 +220,9 @@ public enum PomodoroReducer {
     private static func skip(_ s: inout PomodoroState, at now: Date) {
         guard s.activity != .idle else { return }
         let skippedPhase = s.phase
-        let partial = skippedPhase == .work ? partialWorkRecord(s, at: now) : nil
+        let partial = skippedPhase == .work
+            ? closeWorkRecord(&s, at: now, phaseElapsed: s.elapsedInPhase(at: now), completed: false)
+            : nil
 
         // Paused, the end instant is gone; running, it is in the future. Either way the phase ends now.
         s.phaseEndsAt = now
@@ -168,14 +240,6 @@ public enum PomodoroReducer {
         s.pendingRecords = records
     }
 
-    /// The work done so far in the current phase, or nil when none has elapsed.
-    private static func partialWorkRecord(_ s: PomodoroState, at now: Date) -> IntervalRecord? {
-        guard let started = s.phaseStartedAt else { return nil }
-        let elapsed = Int(s.elapsedInPhase(at: now).rounded())
-        guard elapsed > 0 else { return nil }
-        return IntervalRecord(kind: .work, startedAt: started, elapsedSeconds: elapsed, completed: false)
-    }
-
     private static func goIdle(_ s: inout PomodoroState) {
         s.activity = .idle
         s.phase = .work
@@ -185,6 +249,7 @@ public enum PomodoroReducer {
         s.phaseDuration = s.settings.duration(of: .work)
         s.completedRepsInCycle = 0
         s.completedCyclesInSession = 0
+        clearWorkRecord(&s)
     }
 
     /// Fast-forwards through every phase whose end instant has already passed at `now`.
@@ -219,15 +284,8 @@ public enum PomodoroReducer {
 
         switch s.phase {
         case .work:
-            if let started = s.phaseStartedAt {
-                records.append(
-                    IntervalRecord(
-                        kind: .work,
-                        startedAt: started,
-                        elapsedSeconds: Int(s.phaseDuration.rounded()),
-                        completed: true
-                    )
-                )
+            if let record = closeWorkRecord(&s, at: end, phaseElapsed: s.phaseDuration, completed: true) {
+                records.append(record)
             }
             s.completedRepsInCycle += 1
             if s.completedRepsInCycle >= max(1, settings.repsPerCycle) {

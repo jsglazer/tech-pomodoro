@@ -32,6 +32,16 @@ public struct MirrorContent: Codable, Hashable, Sendable {
     /// once the current countdown runs out and nothing has updated it. Nil while paused, and when the
     /// session ends at this boundary. Optional, so content from an older build still decodes.
     public var nextPhase: MirrorNextPhase?
+    /// The paper tag of tagged Work: class folder name and kind title (`Read`…). Optional, so pushes
+    /// from an older build still decode.
+    public var paperClass: String?
+    public var paperKind: String?
+
+    /// `Data - POGO 511 · Read` while the Work is paper time; nil in the rest phases.
+    public var paperLine: String? {
+        guard let paperClass, phaseTitle == Phase.work.title else { return nil }
+        return paperKind.map { "\(paperClass) · \($0)" } ?? paperClass
+    }
 
     public init(
         phaseTitle: String,
@@ -43,7 +53,9 @@ public struct MirrorContent: Codable, Hashable, Sendable {
         upcoming: [MirrorUpcoming],
         tintHex: String,
         mirroredFrom: String? = nil,
-        nextPhase: MirrorNextPhase? = nil
+        nextPhase: MirrorNextPhase? = nil,
+        paperClass: String? = nil,
+        paperKind: String? = nil
     ) {
         self.phaseTitle = phaseTitle
         self.isPaused = isPaused
@@ -55,6 +67,8 @@ public struct MirrorContent: Codable, Hashable, Sendable {
         self.tintHex = tintHex
         self.mirroredFrom = mirroredFrom
         self.nextPhase = nextPhase
+        self.paperClass = paperClass
+        self.paperKind = paperKind
     }
 
     /// Paused content holds a still readout; running content counts down to `phaseEndsAt`.
@@ -152,6 +166,9 @@ public enum MirrorContentBuilder {
                 boundary.nextPhase.map { MirrorUpcoming(title: $0.title, startsAt: boundary.fireAt) }
             }
         let tint = settings.useRestColor && state.phase != .work ? settings.restColorHex : primaryHex
+        // Carried through the rests too, so a Live Activity that moves into the next Work by itself
+        // still names the class; it is shown during Work only.
+        let paper = state.paperTag
 
         return MirrorContent(
             phaseTitle: state.phase.title,
@@ -162,7 +179,9 @@ public enum MirrorContentBuilder {
             progressLine: "Rep \(state.currentRep) of \(settings.repsPerCycle) · Cycle \(state.currentCycle) of \(settings.cyclesPerSession)",
             upcoming: upcoming,
             tintHex: tint,
-            mirroredFrom: mirroredFrom
+            mirroredFrom: mirroredFrom,
+            paperClass: paper?.className,
+            paperKind: paper?.kind.title
         )
     }
 
@@ -188,9 +207,11 @@ public struct MirrorChangeKey: Equatable, Sendable {
     let repeatSession: Bool
     let useRestColor: Bool
     let restColorHex: String
+    let paperTag: PaperTag?
 
     public init(_ state: PomodoroState) {
         let s = state.settings
+        paperTag = state.paperTag
         activity = state.activity
         phase = state.phase
         phaseEndsAt = state.phaseEndsAt
@@ -328,6 +349,8 @@ public struct MirrorTimerState: Codable, Equatable, Sendable {
     public var completedCyclesInSession: Int
     public var completedSessions: Int
     public var schedule: MirrorSchedule
+    /// The iPhone's paper tag, so a Mac shows `24P` for it. Optional for older builds.
+    public var paperTag: PaperTag?
 
     public init(_ state: PomodoroState) {
         activity = state.activity
@@ -340,6 +363,7 @@ public struct MirrorTimerState: Codable, Equatable, Sendable {
         completedCyclesInSession = state.completedCyclesInSession
         completedSessions = state.completedSessions
         schedule = MirrorSchedule(state.settings)
+        paperTag = state.paperTag
     }
 
     /// The timer under the reader's own `settings`, with this timer's schedule put in. Nil when the
@@ -360,6 +384,7 @@ public struct MirrorTimerState: Codable, Equatable, Sendable {
         state.completedRepsInCycle = completedRepsInCycle
         state.completedCyclesInSession = completedCyclesInSession
         state.completedSessions = completedSessions
+        state.paperTag = paperTag
         return state
     }
 }

@@ -26,6 +26,10 @@ final class AppController: ObservableObject {
     @Published private(set) var lastFocusLine: String?
     /// The document sensor's status line for the Focus tab.
     @Published private(set) var documentSensorStatus: DocumentSensorEngine.Status = .waiting
+    /// Paper corrections (edits and deletions), applied when the history is read.
+    @Published private(set) var paperCorrections: [PaperCorrection] = []
+    /// The end-of-Work dialog's paper line, e.g. `Paper · Data · Read · 25 min`.
+    @Published private(set) var lastPaperLine: String?
 
     /// Republished once a second purely so SwiftUI re-renders the countdown.
     ///
@@ -50,7 +54,12 @@ final class AppController: ObservableObject {
     private let soundPlayer: any SoundPlaying
     private let popupPresenter: any PopupPresenting
     private let loginItem: any LoginItemControlling
+    private let paperTagStore: any PaperTagStoring
+    private let correctionStore: any PaperCorrectionStoring
     private weak var presenter: StatusItemPresenter?
+
+    /// Writes paper sittings to ActivityWatch and the vault, when this Mac's switch is on.
+    let paperPublisher = PaperPublisher()
 
     /// Set for the duration of `popupPresenter.present`, whose `NSAlert.runModal()` pumps a nested
     /// run loop that would otherwise let the `.common`-mode refresh timer re-enter `send` while this
@@ -102,7 +111,9 @@ final class AppController: ObservableObject {
         soundPlayer: any SoundPlaying = SystemSoundPlayer(),
         soundCatalog: SystemSoundCatalog = SystemSoundCatalog(),
         popupPresenter: any PopupPresenting = NSAlertPopupPresenter(),
-        loginItem: any LoginItemControlling = SMAppServiceLoginItem()
+        loginItem: any LoginItemControlling = SMAppServiceLoginItem(),
+        paperTagStore: any PaperTagStoring = UserDefaultsPaperTagStore(defaults: .standard),
+        correctionStore: any PaperCorrectionStoring = MemoryPaperCorrectionStore()
     ) {
         self.dateProvider = dateProvider
         self.calendar = calendar
@@ -112,6 +123,8 @@ final class AppController: ObservableObject {
         self.soundCatalog = soundCatalog
         self.popupPresenter = popupPresenter
         self.loginItem = loginItem
+        self.paperTagStore = paperTagStore
+        self.correctionStore = correctionStore
         let start = dateProvider.now()
         self.displayNow = start
         self.now = start
@@ -123,9 +136,13 @@ final class AppController: ObservableObject {
             settings.soundName = resolved
             settingsStore.save(settings)
         }
-        // The timer always starts idle: in-progress state is deliberately not persisted.
-        self.state = PomodoroState(settings: settings)
+        // The timer always starts idle: in-progress state is deliberately not persisted. The paper
+        // tag is the exception: it is sticky across relaunches, so it is kept on its own.
+        var initial = PomodoroState(settings: settings)
+        initial.paperTag = paperTagStore.load()
+        self.state = initial
 
+        paperCorrections = correctionStore.load()
         reloadHistory()
     }
 
@@ -197,6 +214,7 @@ final class AppController: ObservableObject {
         let sync = CloudSync(
             intervalStore: intervalStore,
             settingsStore: settingsStore,
+            correctionStore: correctionStore,
             stateURL: CloudSync.defaultStateURL(),
             calendar: calendar
         ) { [weak self] change in
@@ -220,10 +238,8 @@ final class AppController: ObservableObject {
     /// Applies any pending one-time settings migration as an ordinary edit, so it is saved and
     /// synced to the other devices like a change made in Settings.
     private func applyMigrations() {
-        guard let migrated = FocusMigrations.migrate(state.settings.focus) else { return }
-        var settings = state.settings
-        settings.focus = migrated
-        update(settings: settings)
+        guard let migrated = SettingsMigrations.migrate(state.settings) else { return }
+        update(settings: migrated)
     }
 
     /// On quit, tells the iPhone this Mac's timer has stopped. Bounded, so quitting never hangs.
@@ -243,6 +259,10 @@ final class AppController: ObservableObject {
         case .history(let records):
             history = records
             recomputeAnalytics(at: dateProvider.now())
+            publishPaper()
+        case .corrections(let corrections):
+            paperCorrections = corrections
+            publishPaper()
         case .settings(let settings):
             // Straight to the reducer: routing through `update(settings:)` would stamp it as a local
             // edit and push it straight back.
@@ -263,8 +283,11 @@ final class AppController: ObservableObject {
         self.now = now
         if isPopoverVisible { displayNow = now }
         let previousActivity = state.activity
+        let previousTag = state.paperTag
         state = PomodoroReducer.reduce(state, event, now)
+        if state.paperTag != previousTag { paperTagStore.save(state.paperTag) }
         notePause(from: previousActivity, to: state.activity, at: now)
+        notePaper(state.pendingRecords)
         // The record of a Work interval that just ended takes its focus summary before tracking moves
         // on to whatever phase began, and before a boundary popup wants to quote it.
         let records = attachFocus(to: state.pendingRecords)
@@ -302,6 +325,10 @@ final class AppController: ObservableObject {
         }
         if old.focus.documents != newSettings.focus.documents || old.focus.serverURL != newSettings.focus.serverURL {
             documentSensor?.sampleNow()
+        }
+        if old.paperPublishEnabled != newSettings.paperPublishEnabled || old.paperLogPath != newSettings.paperLogPath
+            || old.focus.serverURL != newSettings.focus.serverURL {
+            publishPaper()
         }
     }
 
@@ -456,8 +483,11 @@ final class AppController: ObservableObject {
         switch kind {
         case .intervalEnd, .cycleEnd, .sessionEnd:
             // Leaving Work, the line says what that pomodoro actually went on.
-            if state.phase != .work, let line = lastFocusLine {
-                return ("Time's up", "\(state.phase.title) is starting.\n\(line)")
+            if state.phase != .work {
+                let lines = [lastPaperLine, lastFocusLine].compactMap { $0 }
+                if !lines.isEmpty {
+                    return ("Time's up", "\(state.phase.title) is starting.\n" + lines.joined(separator: "\n"))
+                }
             }
             return ("Time's up", "\(state.phase.title) is starting.")
         case .sessionComplete:
@@ -471,6 +501,7 @@ final class AppController: ObservableObject {
             history = try intervalStore.append(records, now: now, calendar: calendar)
             recomputeAnalytics(at: now)
             cloudSync?.recordsAdded(records)
+            if records.contains(where: { $0.paper != nil }) { publishPaper() }
         } catch {
             // A failed history write must never take the timer down with it.
             NSLog("tech-pomodoro: could not write interval history: \(error.localizedDescription)")
@@ -533,6 +564,79 @@ final class AppController: ObservableObject {
         FocusAnalytics.meanFocusShare(records: history, now: dateProvider.now(), calendar: calendar, days: days)
     }
 
+    // MARK: - Paper
+
+    /// Sets the paper tag. During Work a change of class or kind splits the record (see the reducer).
+    func setPaperTag(_ tag: PaperTag) {
+        send(.setPaperTag(tag))
+    }
+
+    func clearPaperTag() {
+        send(.clearPaperTag)
+    }
+
+    /// The iPhone whose own timer is running right now, if any — tagging here too would log one
+    /// sitting twice.
+    var otherDeviceTimerName: String? {
+        phoneTimer.display.flatMap { $0.state.activity == .idle ? nil : $0.phoneName }
+    }
+
+    /// Every paper sitting in the history, corrections applied.
+    var paperSittings: [PaperSittingView] {
+        PaperHistory.sittings(records: history, corrections: paperCorrections)
+    }
+
+    /// The last 14 days of sittings, newest first.
+    var recentPaperSittings: [PaperSittingView] {
+        PaperHistory.recent(records: history, corrections: paperCorrections, now: dateProvider.now(), calendar: calendar)
+    }
+
+    /// Today's paper minutes by class, e.g. `Data 1h 05m · Econ 25m`; nil when none.
+    var paperTodayLine: String? {
+        PaperHistory.lineText(PaperHistory.totals(records: history, corrections: paperCorrections, now: dateProvider.now(), calendar: calendar, days: 1))
+    }
+
+    /// Logs a past sitting: a manual Work record with `paper`, never a rep, no work time.
+    func addPaperSitting(tag: PaperTag, span: DateInterval) {
+        guard span.duration > 0 else { return }
+        persist(records: [ManualSitting.record(tag: tag, span: span)], at: dateProvider.now())
+    }
+
+    /// Edits a sitting. Times are honoured for manual sittings only.
+    func editPaperSitting(_ id: UUID, className: String, kind: PaperKind, note: String, start: Date? = nil, end: Date? = nil) {
+        addCorrection(PaperCorrection(targetID: id, modifiedAt: dateProvider.now(), className: className, kind: kind, note: note, start: start, end: end))
+    }
+
+    func deletePaperSitting(_ id: UUID) {
+        addCorrection(PaperCorrection(targetID: id, modifiedAt: dateProvider.now(), deleted: true))
+    }
+
+    private func addCorrection(_ correction: PaperCorrection) {
+        do {
+            paperCorrections = try correctionStore.add([correction], now: dateProvider.now(), calendar: calendar)
+            cloudSync?.correctionsAdded([correction])
+            publishPaper()
+        } catch {
+            NSLog("tech-pomodoro: could not write a paper correction: \(error.localizedDescription)")
+        }
+    }
+
+    /// Hands the sittings to the publisher (a no-op unless this Mac's switch is on).
+    func publishPaper() {
+        paperPublisher.update(sittings: paperSittings, settings: state.settings, calendar: calendar)
+    }
+
+    /// The end-of-Work line for a tagged record that reached its end.
+    private func notePaper(_ records: [IntervalRecord]) {
+        guard let record = records.last(where: { $0.kind == .work && $0.completed }) else { return }
+        guard let paper = record.paper else {
+            lastPaperLine = nil
+            return
+        }
+        let minutes = Int((Double(record.elapsedSeconds) / 60).rounded())
+        lastPaperLine = "Paper · \(PaperTag(className: paper.className, kind: paper.kind).shortLabel) · \(minutes) min"
+    }
+
     private var isTrackingFocus: Bool {
         settings.focus.enabled && state.activity != .idle && state.phase == .work
     }
@@ -570,7 +674,8 @@ final class AppController: ObservableObject {
 
     /// Starts tracking afresh whenever a new Work interval begins, and stops outside Work.
     private func trackFocusInterval() {
-        let start = isTrackingFocus ? state.phaseStartedAt : nil
+        // A paper tag change splits a Work interval into records; each is tracked on its own.
+        let start = isTrackingFocus ? (state.workRecordStartedAt ?? state.phaseStartedAt) : nil
         guard start != focusIntervalStart else { return }
         focusIntervalStart = start
         pausedSpans = []
@@ -621,7 +726,8 @@ final class AppController: ObservableObject {
             to: dateProvider.now(),
             settings: settings.focus,
             manualAnchor: manualAnchor,
-            paused: pauses(at: dateProvider.now())
+            paused: pauses(at: dateProvider.now()),
+            paperClass: state.phase == .work ? state.paperTag?.className : nil
         )
         focus = snapshot
         checkDrift(snapshot)

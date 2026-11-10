@@ -14,3 +14,5 @@ Production record types cannot be created by the app at runtime, so the schema h
 Until then the Settings tab shows the CloudKit error next to "Sync via iCloud"; the app works normally, and anything not yet uploaded is offered again on the next launch.
 
 **After a schema change** (1.0.15 added `MirrorRecord`): repeat steps 2 and 3. Importing the whole `schema.ckdb` again is safe; existing types are left as they are. Until `MirrorRecord` is in Production, mirroring reads nothing and the Mac's status line shows the CloudKit error.
+
+**1.0.23 (paper corrections): no schema change.** Paper corrections are stored as `IntervalRecord`-type records named `pc-<uuid>`, with the correction's JSON in `payload` and its `modifiedAt` in `startedAt`, so nothing needs deploying in the CloudKit console. Older app versions fail to decode such a payload as an interval and skip it.

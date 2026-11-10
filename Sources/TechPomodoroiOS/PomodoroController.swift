@@ -31,6 +31,8 @@ final class PomodoroController: ObservableObject {
     @Published private(set) var syncStatus: CloudSyncStatus = .off
     /// The Mac timer shown in place of this iPhone's own while one is active (display only).
     @Published private(set) var mirror: MirrorContent?
+    /// Paper corrections (edits and deletions), applied when the history is read.
+    @Published private(set) var paperCorrections: [PaperCorrection] = []
 
     let soundCatalog: BundledSoundCatalog
 
@@ -39,6 +41,8 @@ final class PomodoroController: ObservableObject {
     private let intervalStore: any IntervalStore
     private let settingsStore: any SettingsStoring
     private let snapshotStore: SessionSnapshotStore?
+    private let paperTagStore: any PaperTagStoring
+    private let correctionStore: any PaperCorrectionStoring
     private let soundPlayer: any SoundPlaying
     private let scheduler = NotificationScheduler()
     private let liveActivity = LiveActivityController()
@@ -68,6 +72,8 @@ final class PomodoroController: ObservableObject {
         intervalStore: any IntervalStore,
         settingsStore: any SettingsStoring,
         snapshotStore: SessionSnapshotStore?,
+        paperTagStore: any PaperTagStoring = UserDefaultsPaperTagStore(defaults: .standard),
+        correctionStore: any PaperCorrectionStoring = MemoryPaperCorrectionStore(),
         soundPlayer: any SoundPlaying = BundledSoundPlayer(),
         soundCatalog: BundledSoundCatalog = BundledSoundCatalog()
     ) {
@@ -76,6 +82,8 @@ final class PomodoroController: ObservableObject {
         self.intervalStore = intervalStore
         self.settingsStore = settingsStore
         self.snapshotStore = snapshotStore
+        self.paperTagStore = paperTagStore
+        self.correctionStore = correctionStore
         self.soundPlayer = soundPlayer
         self.soundCatalog = soundCatalog
 
@@ -87,13 +95,20 @@ final class PomodoroController: ObservableObject {
         // Unlike the Mac, a running session is restored: iOS may have killed the app mid-phase while
         // its notifications went on firing. A `.tick` at `now` then fast-forwards through any phases
         // that ended meanwhile and logs them. Their alert is dropped — the notification already gave it.
-        if let restored = snapshotStore?.load()?.restore(settings: settings) {
+        // The paper tag is sticky across relaunches, idle or not, so it has a store of its own and
+        // is the source of truth for the tag; the snapshot carries the Work record's stretches.
+        let paperTag = paperTagStore.load()
+        self.paperCorrections = correctionStore.load()
+        if var restored = snapshotStore?.load()?.restore(settings: settings) {
+            restored.paperTag = paperTag
             let caughtUp = PomodoroReducer.reduce(restored, .tick, now)
             self.state = caughtUp
             reloadHistory()
             persist(records: caughtUp.pendingRecords, at: now)
         } else {
-            self.state = PomodoroState(settings: settings)
+            var fresh = PomodoroState(settings: settings)
+            fresh.paperTag = paperTag
+            self.state = fresh
             reloadHistory()
         }
         scheduleDidChange(at: now)
@@ -123,7 +138,9 @@ final class PomodoroController: ObservableObject {
         return PomodoroController(
             intervalStore: intervalStore,
             settingsStore: UserDefaultsSettingsStore(defaults: .standard),
-            snapshotStore: (try? SessionSnapshotStore.applicationSupportURL()).map(SessionSnapshotStore.init)
+            snapshotStore: (try? SessionSnapshotStore.applicationSupportURL()).map(SessionSnapshotStore.init),
+            correctionStore: (try? FilePaperCorrectionStore.applicationSupportURL())
+                .map { FilePaperCorrectionStore(url: $0) as any PaperCorrectionStoring } ?? MemoryPaperCorrectionStore()
         )
     }
 
@@ -180,6 +197,8 @@ final class PomodoroController: ObservableObject {
         let now = dateProvider.now()
         let before = ScheduleKey(state)
         let next = PomodoroReducer.reduce(state, event, now)
+        if next.paperTag != state.paperTag { paperTagStore.save(next.paperTag) }
+        notePaper(next.pendingRecords)
         // Most ticks change nothing; skipping the assignment keeps SwiftUI from re-rendering the
         // whole tree once a second for no reason.
         if next != state { state = next }
@@ -213,6 +232,7 @@ final class PomodoroController: ObservableObject {
         let sync = CloudSync(
             intervalStore: intervalStore,
             settingsStore: settingsStore,
+            correctionStore: correctionStore,
             stateURL: CloudSync.defaultStateURL(),
             calendar: calendar
         ) { [weak self] change in
@@ -223,6 +243,14 @@ final class PomodoroController: ObservableObject {
             self?.syncStatus = status
         }
         sync.setEnabled(state.settings.cloudSyncEnabled)
+        applyMigrations()
+    }
+
+    /// Applies any pending one-time settings migration as an ordinary edit, saved and synced like a
+    /// change made in Settings — the same as on the Mac.
+    private func applyMigrations() {
+        guard let migrated = SettingsMigrations.migrate(state.settings) else { return }
+        update(settings: migrated)
     }
 
     /// Something another device changed, already written to the local stores by `CloudSync`.
@@ -234,6 +262,9 @@ final class PomodoroController: ObservableObject {
         case .settings(let settings):
             // Straight to the reducer, so the change is not stamped as a local edit and echoed back.
             send(.settingsChanged(settings))
+            applyMigrations()
+        case .corrections(let corrections):
+            paperCorrections = corrections
         }
     }
 
@@ -329,7 +360,7 @@ final class PomodoroController: ObservableObject {
                 pulse(times: settings.flashRepeatCount)
             }
             if settings.popupEnabled {
-                popup = PopupMessage(kind: kind, startingPhase: state.phase)
+                popup = PopupMessage(kind: kind, startingPhase: state.phase, paperLine: state.phase == .work ? nil : lastPaperLine)
             }
         }
     }
@@ -388,6 +419,65 @@ final class PomodoroController: ObservableObject {
         recomputeAnalytics(at: dateProvider.now())
     }
 
+    // MARK: - Paper
+
+    /// The end-of-Work line for a tagged record that reached its end, e.g. `Paper · Data · Read · 25 min`.
+    private(set) var lastPaperLine: String?
+
+    func setPaperTag(_ tag: PaperTag) {
+        send(.setPaperTag(tag))
+    }
+
+    func clearPaperTag() {
+        send(.clearPaperTag)
+    }
+
+    /// The Mac whose timer is running right now, if any — tagging here too would log one sitting twice.
+    var otherDeviceTimerName: String? {
+        mirror.map { $0.mirroredFrom ?? "your Mac" }
+    }
+
+    var recentPaperSittings: [PaperSittingView] {
+        PaperHistory.recent(records: history, corrections: paperCorrections, now: dateProvider.now(), calendar: calendar)
+    }
+
+    /// Today's paper minutes by class, per class; empty when none.
+    var paperToday: [(className: String, seconds: Int)] {
+        PaperHistory.totals(records: history, corrections: paperCorrections, now: dateProvider.now(), calendar: calendar, days: 1)
+    }
+
+    func addPaperSitting(tag: PaperTag, span: DateInterval) {
+        guard span.duration > 0 else { return }
+        persist(records: [ManualSitting.record(tag: tag, span: span)], at: dateProvider.now())
+    }
+
+    func editPaperSitting(_ id: UUID, className: String, kind: PaperKind, note: String, start: Date? = nil, end: Date? = nil) {
+        addCorrection(PaperCorrection(targetID: id, modifiedAt: dateProvider.now(), className: className, kind: kind, note: note, start: start, end: end))
+    }
+
+    func deletePaperSitting(_ id: UUID) {
+        addCorrection(PaperCorrection(targetID: id, modifiedAt: dateProvider.now(), deleted: true))
+    }
+
+    private func addCorrection(_ correction: PaperCorrection) {
+        do {
+            paperCorrections = try correctionStore.add([correction], now: dateProvider.now(), calendar: calendar)
+            cloudSync?.correctionsAdded([correction])
+        } catch {
+            NSLog("tech-pomodoro: could not write a paper correction: \(error.localizedDescription)")
+        }
+    }
+
+    private func notePaper(_ records: [IntervalRecord]) {
+        guard let record = records.last(where: { $0.kind == .work && $0.completed }) else { return }
+        guard let paper = record.paper else {
+            lastPaperLine = nil
+            return
+        }
+        let minutes = Int((Double(record.elapsedSeconds) / 60).rounded())
+        lastPaperLine = "Paper · \(PaperTag(className: paper.className, kind: paper.kind).shortLabel) · \(minutes) min"
+    }
+
     // MARK: - Export
 
     enum ExportFormat {
@@ -424,6 +514,9 @@ private struct ScheduleKey: Equatable {
     let completedRepsInCycle: Int
     let completedCyclesInSession: Int
     let settings: PomodoroSettings
+    /// A tag change splits the Work record and changes what the Live Activity and the Macs show.
+    let paperTag: PaperTag?
+    let workRecordStartedAt: Date?
 
     init(_ state: PomodoroState) {
         activity = state.activity
@@ -433,6 +526,8 @@ private struct ScheduleKey: Equatable {
         completedRepsInCycle = state.completedRepsInCycle
         completedCyclesInSession = state.completedCyclesInSession
         settings = state.settings
+        paperTag = state.paperTag
+        workRecordStartedAt = state.workRecordStartedAt
     }
 }
 
@@ -442,11 +537,11 @@ struct PopupMessage: Identifiable, Equatable {
     let title: String
     let message: String
 
-    init(kind: AlertKind, startingPhase: Phase) {
+    init(kind: AlertKind, startingPhase: Phase, paperLine: String? = nil) {
         switch kind {
         case .intervalEnd, .cycleEnd, .sessionEnd:
             title = "Time's up"
-            message = "\(startingPhase.title) is starting."
+            message = "\(startingPhase.title) is starting." + (paperLine.map { "\n\($0)" } ?? "")
         case .sessionComplete:
             title = "Session complete"
             message = "The full schedule has finished."

@@ -86,12 +86,6 @@ enum OpenFiles {
 /// `OpenFiles`, and aw-server over loopback HTTP.
 struct LiveDocumentSensorPort: DocumentSensorPort {
 
-    private static let session: URLSession = {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 3
-        return URLSession(configuration: config)
-    }()
-
     func read(settings: DocumentSensorSettings) async -> DocumentReading? {
         let front = await MainActor.run { () -> (pid_t, String?, String?)? in
             guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
@@ -125,6 +119,21 @@ struct LiveDocumentSensorPort: DocumentSensorPort {
     }
 
     private func request(_ server: String, _ path: String, method: String, body: Data? = nil, accept: Set<Int> = []) async throws -> Data {
+        try await ActivityWatchHTTP.request(server, path, method: method, body: body, accept: accept)
+    }
+}
+
+/// Loopback-only requests to aw-server's REST API, shared by the document sensor and the paper
+/// publisher.
+enum ActivityWatchHTTP {
+
+    static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 3
+        return URLSession(configuration: config)
+    }()
+
+    static func request(_ server: String, _ path: String, method: String, body: Data? = nil, accept: Set<Int> = []) async throws -> Data {
         let base = server.hasSuffix("/") ? String(server.dropLast()) : server
         guard LoopbackURL.isLoopback(base), let url = URL(string: "\(base)/api/0/\(path)") else {
             throw URLError(.badURL)
@@ -135,11 +144,17 @@ struct LiveDocumentSensorPort: DocumentSensorPort {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        let (data, response) = try await Self.session.data(for: request)
+        let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode), !accept.contains(http.statusCode) {
             throw URLError(.badServerResponse)
         }
         return data
+    }
+
+    /// The hostname aw-server files buckets under.
+    static func hostname(server: String) async throws -> String {
+        struct Info: Decodable { let hostname: String }
+        return try JSONDecoder().decode(Info.self, from: try await request(server, "info", method: "GET")).hostname
     }
 }
 

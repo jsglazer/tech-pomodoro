@@ -6,7 +6,10 @@ import TechPomodoroCore
 ///
 /// Layout in the private database: one custom zone, `Pomodoro`, holding
 /// - one `IntervalRecord` per history record (record name `iv-<uuid>`), immutable once written, and
-/// - a single `Settings` record (record name `settings`).
+/// - a single `Settings` record (record name `settings`), and
+/// - one record per paper correction (record name `pc-<uuid>`), stored as the `IntervalRecord` type
+///   with the correction's JSON as its payload, so no schema change is needed. An older build reads
+///   the payload as an interval, fails to decode it, and skips it; its history is unaffected.
 /// Both carry their value as a JSON `payload`, so a field added to the app's types later needs no
 /// CloudKit schema change.
 actor CloudSyncEngineHost: CKSyncEngineDelegate {
@@ -43,6 +46,7 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
     func start(
         stateSerialization: CKSyncEngine.State.Serialization?,
         pendingIntervalIDs: [UUID],
+        pendingCorrectionIDs: [UUID] = [],
         createZone: Bool,
         sendSettings: Bool
     ) async -> Bool {
@@ -74,6 +78,7 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
             enqueueSettings()
         }
         enqueue(intervalIDs: pendingIntervalIDs)
+        enqueue(correctionIDs: pendingCorrectionIDs)
         await fetch()
         return true
     }
@@ -82,6 +87,8 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
         engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
         let ids = await owner?.allIntervalIDs() ?? []
         var changes = ids.map { CKSyncEngine.PendingRecordZoneChange.saveRecord(Self.recordID(for: $0)) }
+        let corrections = await owner?.allCorrectionIDs() ?? []
+        changes += corrections.map { .saveRecord(Self.correctionRecordID(for: $0)) }
         changes.append(.saveRecord(Self.settingsRecordID))
         engine.state.add(pendingRecordZoneChanges: changes)
     }
@@ -98,6 +105,11 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
 
     func enqueue(intervalIDs: [UUID]) {
         engine?.state.add(pendingRecordZoneChanges: intervalIDs.map { .saveRecord(Self.recordID(for: $0)) })
+    }
+
+    func enqueue(correctionIDs: [UUID]) {
+        guard !correctionIDs.isEmpty else { return }
+        engine?.state.add(pendingRecordZoneChanges: correctionIDs.map { .saveRecord(Self.correctionRecordID(for: $0)) })
     }
 
     func enqueueSettings() {
@@ -130,6 +142,7 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
                 await owner?.storeSettingsSystemFields(Self.systemFields(of: record))
             }
             await owner?.markUploaded(sent.savedRecords.compactMap { Self.intervalID(from: $0.recordID) })
+            await owner?.markCorrectionsUploaded(sent.savedRecords.compactMap { Self.correctionID(from: $0.recordID) })
             await handleFailedSaves(sent.failedRecordSaves, engine: syncEngine)
 
         case .willFetchChanges, .willSendChanges:
@@ -151,6 +164,7 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
         guard !pending.isEmpty else { return nil }
 
         var intervalIDs: [UUID] = []
+        var correctionIDs: [UUID] = []
         var wantsSettings = false
         for change in pending {
             guard case .saveRecord(let id) = change else { continue }
@@ -158,9 +172,11 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
                 wantsSettings = true
             } else if let uuid = Self.intervalID(from: id) {
                 intervalIDs.append(uuid)
+            } else if let uuid = Self.correctionID(from: id) {
+                correctionIDs.append(uuid)
             }
         }
-        guard let outgoing = await owner?.outgoing(intervalIDs: intervalIDs, includeSettings: wantsSettings) else {
+        guard let outgoing = await owner?.outgoing(intervalIDs: intervalIDs, correctionIDs: correctionIDs, includeSettings: wantsSettings) else {
             return nil
         }
 
@@ -175,8 +191,14 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
 
     private func applyFetched(_ records: [CKRecord], engine: CKSyncEngine) async {
         var intervals: [IntervalRecord] = []
+        var corrections: [PaperCorrection] = []
         for record in records {
             switch record.recordType {
+            case RecordType.interval where Self.correctionID(from: record.recordID) != nil:
+                if let data = record[Field.payload] as? Data,
+                   let correction = try? PaperCorrection.fromSyncPayload(data) {
+                    corrections.append(correction)
+                }
             case RecordType.interval:
                 if let data = record[Field.payload] as? Data,
                    let interval = try? IntervalRecord.fromSyncPayload(data) {
@@ -195,6 +217,7 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
             }
         }
         await owner?.applyFetched(records: intervals)
+        await owner?.applyFetched(corrections: corrections)
     }
 
     private func handleFailedSaves(_ failures: [CKSyncEngine.Event.SentRecordZoneChanges.FailedRecordSave], engine: CKSyncEngine) async {
@@ -213,6 +236,7 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
                 }
                 // An interval that already exists is the same immutable record: it is uploaded.
                 if let uuid = Self.intervalID(from: id) { await owner?.markUploaded([uuid]) }
+                if let uuid = Self.correctionID(from: id) { await owner?.markCorrectionsUploaded([uuid]) }
 
             case .zoneNotFound:
                 needsZone = true
@@ -286,7 +310,23 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
         return UUID(uuidString: String(recordID.recordName.dropFirst(3)))
     }
 
+    static func correctionRecordID(for correctionID: UUID) -> CKRecord.ID {
+        CKRecord.ID(recordName: "pc-\(correctionID.uuidString)", zoneID: zoneID)
+    }
+
+    static func correctionID(from recordID: CKRecord.ID) -> UUID? {
+        guard recordID.recordName.hasPrefix("pc-") else { return nil }
+        return UUID(uuidString: String(recordID.recordName.dropFirst(3)))
+    }
+
     private static func makeRecord(for recordID: CKRecord.ID, from outgoing: CloudSyncOutgoing) -> CKRecord? {
+        if let uuid = correctionID(from: recordID) {
+            guard let correction = outgoing.corrections[uuid] else { return nil }
+            let record = CKRecord(recordType: RecordType.interval, recordID: recordID)
+            record[Field.payload] = correction.payload as NSData
+            record[Field.startedAt] = correction.startedAt as NSDate
+            return record
+        }
         if recordID == settingsRecordID {
             guard let settings = outgoing.settings else { return nil }
             let record = settings.systemFields.flatMap(record(fromSystemFields:))

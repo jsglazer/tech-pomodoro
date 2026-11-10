@@ -42,6 +42,16 @@ struct PomodoroActivityAttributes: ActivityAttributes {
         /// The phase after this one, so the activity can count it down by itself once this countdown
         /// has run out and nothing has updated it. Nil while paused or when the session ends here.
         var nextPhase: NextPhase?
+        /// The paper tag of tagged Work — class folder name and kind (`Read`…). Optional, so content
+        /// from an older build still decodes. Same keys as `MirrorContent`.
+        var paperClass: String?
+        var paperKind: String?
+
+        /// `Data - POGO 511 · Read`, or nil outside paper Work.
+        var paperLine: String? {
+            guard let paperClass, phaseTitle == "Work" else { return nil }
+            return paperKind.map { "\(paperClass) · \($0)" } ?? paperClass
+        }
     }
 
     struct NextPhase: Codable, Hashable, Sendable {

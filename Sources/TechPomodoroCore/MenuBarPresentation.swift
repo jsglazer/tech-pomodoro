@@ -85,7 +85,7 @@ public enum MenuBarFormatter {
             switch settings.menuBarMode {
             case .clockIcon:
                 return MenuBarPresentation(
-                    text: phaseLetter(state.phase),
+                    text: phaseLetter(for: state),
                     symbolName: "pause.circle",
                     foreground: .alert,
                     background: background,
@@ -93,7 +93,7 @@ public enum MenuBarFormatter {
                 )
             case .minutesRemaining:
                 return MenuBarPresentation(
-                    text: countdownText(state.remaining(at: now), phase: state.phase),
+                    text: countdownText(state.remaining(at: now), for: state),
                     foreground: .alert,
                     background: background,
                     adaptsToMenuBar: false
@@ -107,7 +107,7 @@ public enum MenuBarFormatter {
             // icon, since there are no digits to sit next to.
             let custom = restHex(for: state) ?? (settings.useCustomTextColor ? settings.menuBarTextColorHex : nil)
             return MenuBarPresentation(
-                text: phaseLetter(state.phase),
+                text: phaseLetter(for: state),
                 symbolName: "timer",
                 foreground: .primaryText,
                 background: background,
@@ -127,7 +127,7 @@ public enum MenuBarFormatter {
             let custom = isThreshold ? nil : (restHex(for: state)
                 ?? (settings.useCustomTextColor ? settings.menuBarTextColorHex : nil))
             return MenuBarPresentation(
-                text: countdownText(remaining, phase: state.phase),
+                text: countdownText(remaining, for: state),
                 symbolName: nil,
                 foreground: token,
                 background: background,
@@ -140,6 +140,22 @@ public enum MenuBarFormatter {
     /// `W` during Work, `R` during any of the rest phases (Rest, Long Break, Session Rest).
     public static func phaseLetter(_ phase: Phase) -> String {
         phase == .work ? "W" : "R"
+    }
+
+    /// The letter for this state: `P` instead of `W` while the Work is tagged as paper time.
+    public static func phaseLetter(for state: PomodoroState) -> String {
+        state.phase == .work && state.paperTag != nil ? "P" : phaseLetter(state.phase)
+    }
+
+    /// `24P` for paper Work, else the same as `countdownText(_:phase:)`.
+    public static func countdownText(_ remaining: TimeInterval, for state: PomodoroState) -> String {
+        minutesText(remaining) + phaseLetter(for: state)
+    }
+
+    /// `Paper · Data - POGO 511 · Read` during tagged Work, else the phase title.
+    public static func phaseTitle(for state: PomodoroState) -> String {
+        if state.phase == .work, let tag = state.paperTag { return "Paper · \(tag.label)" }
+        return state.phase.title
     }
 
     /// The menu bar title: the minutes left with the phase letter after them, e.g. `24W` or `4R`.
@@ -167,7 +183,8 @@ public enum MenuBarFormatter {
         }
         let remaining = Int(max(0, state.remaining(at: now)).rounded(.up))
         let clock = String(format: "%02d:%02d", remaining / 60, remaining % 60)
-        let title = state.activity == .paused ? "Paused — \(state.phase.title)" : state.phase.title
+        let phase = phaseTitle(for: state)
+        let title = state.activity == .paused ? "Paused — \(phase)" : phase
         return HoverInfo(title: title, detail: clock)
     }
 
@@ -180,7 +197,7 @@ public enum MenuBarFormatter {
         let remaining = Int(max(0, state.remaining(at: now)).rounded(.up))
         let clock = String(format: "%02d:%02d", remaining / 60, remaining % 60)
         let prefix = state.activity == .paused ? "Paused — " : ""
-        return "\(prefix)\(state.phase.title) \(clock)"
+        return "\(prefix)\(phaseTitle(for: state)) \(clock)"
     }
 
     /// Threshold colours apply to every phase alike — a rest running out warns the same way Work

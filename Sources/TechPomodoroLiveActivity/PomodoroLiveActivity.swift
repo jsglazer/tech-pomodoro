@@ -41,8 +41,9 @@ struct PomodoroLiveActivity: Widget {
                     VStack(spacing: 8) {
                         PhaseProgress(state: state, tint: tint)
                         HStack {
-                            Text(state.progressLine)
+                            Text(state.paperLine.map { "Paper · \($0)" } ?? state.progressLine)
                                 .font(.caption)
+                                .lineLimit(1)
                                 .foregroundStyle(Color.tpDimmed)
                             Spacer()
                             if isMirror {
@@ -117,9 +118,10 @@ private struct LockScreenView: View {
                     Text(state.isPaused ? "Paused — \(state.phaseTitle)" : state.phaseTitle)
                         .font(.headline)
                         .foregroundStyle(tint)
-                    Text(state.progressLine)
+                    Text(state.paperLine.map { "Paper · \($0)" } ?? state.progressLine)
                         .font(.caption)
                         .foregroundStyle(Color.tpDimmed)
+                        .lineLimit(1)
                 }
                 Spacer()
                 CountdownText(state: state)

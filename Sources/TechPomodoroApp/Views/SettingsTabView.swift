@@ -87,6 +87,10 @@ struct SettingsTabView: View {
 
             Divider().overlay(Color.tpRule)
 
+            PaperClassesEditor(controller: controller)
+
+            Divider().overlay(Color.tpRule)
+
             HStack {
                 Text("Export history").foregroundStyle(Color.tpDimmed)
                 Spacer()

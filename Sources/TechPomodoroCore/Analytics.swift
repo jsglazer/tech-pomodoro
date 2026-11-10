@@ -83,6 +83,8 @@ public enum AnalyticsAggregator {
         for record in records where record.startedAt >= start {
             switch record.kind {
             case .work:
+                // A past sitting logged by hand is paper time only: no work time, never a rep.
+                guard !record.isManual else { continue }
                 seconds += record.elapsedSeconds
                 if record.completed { reps += 1 }
             case .cycleCompleted: cycles += 1
@@ -99,7 +101,8 @@ public enum AnalyticsAggregator {
     }
 
     /// Drops records older than the retention horizon, counted in calendar days. Applied on every
-    /// write so the history file cannot grow without bound.
+    /// write so the history file cannot grow without bound. Paper records are kept for
+    /// `PaperHistory.retentionDays` instead, so the vault file holds a whole term.
     public static func prune(
         _ records: [IntervalRecord],
         now: Date,
@@ -113,6 +116,11 @@ public enum AnalyticsAggregator {
         ) else {
             return records
         }
-        return records.filter { $0.startedAt >= cutoff }
+        let paperCutoff = calendar.date(
+            byAdding: .day,
+            value: -max(retentionDays, PaperHistory.retentionDays),
+            to: calendar.startOfDay(for: now)
+        ) ?? cutoff
+        return records.filter { $0.startedAt >= cutoff || ($0.paper != nil && $0.startedAt >= paperCutoff) }
     }
 }

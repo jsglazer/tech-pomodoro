@@ -262,6 +262,9 @@ public struct FocusSnapshot: Sendable, Equatable {
     /// What you are on right now.
     public var current: FocusCategory
     public var runs: [FocusRun]
+    /// The paper tag's class while the Work is paper time. The anchor is then pinned to that class:
+    /// any note whose area's last folder is the class is on task, at either drift level.
+    public var paperClass: String?
 
     public static let empty = FocusSnapshot(
         anchor: nil, anchorIsLocked: false, anchorIsManual: false, projectSeconds: [:],
@@ -269,10 +272,37 @@ public struct FocusSnapshot: Sendable, Equatable {
         offAnchorSeconds: 0, current: .neutral, runs: []
     )
 
+    public init(
+        anchor: FocusProject?, anchorIsLocked: Bool, anchorIsManual: Bool,
+        projectSeconds: [FocusProject: TimeInterval], supportSeconds: TimeInterval,
+        distractionSeconds: TimeInterval, neutralSeconds: TimeInterval, switches: Int,
+        offAnchorSeconds: TimeInterval, current: FocusCategory, runs: [FocusRun], paperClass: String? = nil
+    ) {
+        self.anchor = anchor
+        self.anchorIsLocked = anchorIsLocked
+        self.anchorIsManual = anchorIsManual
+        self.projectSeconds = projectSeconds
+        self.supportSeconds = supportSeconds
+        self.distractionSeconds = distractionSeconds
+        self.neutralSeconds = neutralSeconds
+        self.switches = switches
+        self.offAnchorSeconds = offAnchorSeconds
+        self.current = current
+        self.runs = runs
+        self.paperClass = paperClass
+    }
+
+    /// Whether a project counts as the anchor.
+    public func isOnAnchor(_ project: FocusProject, level: DriftLevel) -> Bool {
+        if let paperClass { return FocusTracker.areaMatches(project, className: paperClass) }
+        guard let anchor else { return false }
+        return project.at(level) == anchor
+    }
+
     /// Seconds on the anchor (at the drift level) plus on-task support time.
     public func anchorSeconds(level: DriftLevel) -> TimeInterval {
-        guard let anchor else { return 0 }
-        let onAnchor = projectSeconds.filter { $0.key.at(level) == anchor }.values.reduce(0, +)
+        guard anchor != nil || paperClass != nil else { return 0 }
+        let onAnchor = projectSeconds.filter { isOnAnchor($0.key, level: level) }.values.reduce(0, +)
         return onAnchor + supportSeconds
     }
 
@@ -299,7 +329,9 @@ public struct FocusSnapshot: Sendable, Equatable {
             projectSeconds: byTask,
             supportSeconds: Int(supportSeconds.rounded()),
             distractionSeconds: Int(distractionSeconds.rounded()),
-            driftAlerts: driftAlerts
+            driftAlerts: driftAlerts,
+            // Information only: on-screen time credited to the tagged class. Never added to paper time.
+            paperOverlapSeconds: paperClass == nil ? nil : Int(anchorSeconds(level: level).rounded())
         )
     }
 }
@@ -319,7 +351,8 @@ public enum FocusTracker {
         to now: Date,
         settings: FocusSettings,
         manualAnchor: FocusProject? = nil,
-        paused: [AwaySpan] = []
+        paused: [AwaySpan] = [],
+        paperClass: String? = nil
     ) -> FocusSnapshot {
         guard now > start else { return .empty }
         // Time the timer spent paused is neutral, like away time: it counts neither way and does not
@@ -343,9 +376,19 @@ public enum FocusTracker {
         // The anchor: chosen by hand, or the leading project of the opening window. With no project
         // time in the opening window at all, the leader so far stands in, unlocked.
         let lockAt = start.addingTimeInterval(TimeInterval(settings.anchorLockMinutes * 60))
+        let paperClass = paperClass.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
         var anchor = manualAnchor?.at(level)
         var locked = manualAnchor != nil
-        if anchor == nil {
+        if let paperClass {
+            // Paper time pins the anchor to the tagged class, locked from the start. The class's own
+            // area path once a note in it has been seen; until then the bare class name.
+            let seen = runs.compactMap { run -> FocusProject? in
+                if case .project(let p) = run.category, areaMatches(p, className: paperClass) { return p }
+                return nil
+            }.first
+            anchor = seen.map { FocusProject(area: $0.area, task: $0.area) } ?? FocusProject(area: paperClass, task: paperClass)
+            locked = true
+        } else if anchor == nil {
             if let opening = leader(runs, until: min(now, lockAt), level: level) {
                 anchor = opening
                 locked = now >= lockAt
@@ -354,9 +397,15 @@ public enum FocusTracker {
             }
         }
 
+        func onAnchor(_ p: FocusProject) -> Bool {
+            if let paperClass { return areaMatches(p, className: paperClass) }
+            return p.at(level) == anchor
+        }
         func key(_ c: FocusCategory) -> String? {
             switch c {
-            case .project(let p): return "p:" + p.at(level).task
+            case .project(let p):
+                if paperClass != nil, onAnchor(p), let anchor { return "p:" + anchor.task }
+                return "p:" + p.at(level).task
             case .support: return anchor.map { "p:" + $0.task }
             case .distraction: return "distraction"
             case .neutral: return nil
@@ -365,7 +414,7 @@ public enum FocusTracker {
         func isOff(_ c: FocusCategory) -> Bool {
             switch c {
             case .distraction: return true
-            case .project(let p): return locked && anchor != nil && p.at(level) != anchor
+            case .project(let p): return locked && anchor != nil && !onAnchor(p)
             case .support, .neutral: return false
             }
         }
@@ -396,8 +445,15 @@ public enum FocusTracker {
             switches: switches,
             offAnchorSeconds: streak,
             current: runs.last?.category ?? .neutral,
-            runs: runs
+            runs: runs,
+            paperClass: paperClass
         )
+    }
+
+    /// The paper tag names a class by its folder name; a focus area is a vault path. They match on the
+    /// area's last folder: area `Classes/2026-B/Data - POGO 511` ↔ class `Data - POGO 511`.
+    public static func areaMatches(_ project: FocusProject, className: String) -> Bool {
+        project.areaName.caseInsensitiveCompare(className.trimmingCharacters(in: .whitespaces)) == .orderedSame
     }
 
     /// Splits `start...now` at every span edge and categorises each piece, merging neighbours that
@@ -493,6 +549,10 @@ public struct FocusSummary: Codable, Sendable, Equatable {
     public var supportSeconds: Int
     public var distractionSeconds: Int
     public var driftAlerts: Int
+    /// Paper Work only: seconds of on-screen activity credited to the tagged class during the record.
+    /// Information only — never added to paper time (a tagged span counts once, for the tagged class).
+    /// Optional, so older decoders and older history are unaffected.
+    public var paperOverlapSeconds: Int?
 
     public init(
         anchorArea: String?,
@@ -502,7 +562,8 @@ public struct FocusSummary: Codable, Sendable, Equatable {
         projectSeconds: [String: Int],
         supportSeconds: Int,
         distractionSeconds: Int,
-        driftAlerts: Int
+        driftAlerts: Int,
+        paperOverlapSeconds: Int? = nil
     ) {
         self.anchorArea = anchorArea
         self.anchorTask = anchorTask
@@ -512,6 +573,7 @@ public struct FocusSummary: Codable, Sendable, Equatable {
         self.supportSeconds = supportSeconds
         self.distractionSeconds = distractionSeconds
         self.driftAlerts = driftAlerts
+        self.paperOverlapSeconds = paperOverlapSeconds
     }
 
     /// `Asgn03-TheoryHypotheses · 78% · 3 switches` — the end-of-interval line.
@@ -678,7 +740,8 @@ extension MenuBarFormatter {
     /// The hover readout with the anchor named in the title during Work, e.g. `Work — Asgn03-…`.
     public static func hoverInfo(for state: PomodoroState, at now: Date, focus: FocusSnapshot?) -> HoverInfo {
         let info = hoverInfo(for: state, at: now)
-        guard let anchor = focus?.anchor, state.activity != .idle, state.phase == .work else { return info }
+        // Paper Work already names its class; the pinned anchor would only repeat it.
+        guard let anchor = focus?.anchor, state.activity != .idle, state.phase == .work, state.paperTag == nil else { return info }
         return HoverInfo(title: "\(info.title) — \(anchor.taskName)", detail: info.detail)
     }
 }

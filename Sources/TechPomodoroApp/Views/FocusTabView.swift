@@ -41,7 +41,10 @@ struct FocusPanel: View {
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
-                    .help("The project this pomodoro is about. Pick one to pin it for the rest of the interval.")
+                    .disabled(focus.paperClass != nil)
+                    .help(focus.paperClass != nil
+                          ? "Pinned to the paper tag's class while it is set."
+                          : "The project this pomodoro is about. Pick one to pin it for the rest of the interval.")
                 }
                 .font(.system(size: 12))
 
@@ -90,6 +93,7 @@ struct FocusPanel: View {
     }
 
     private func anchorText(_ focus: FocusSnapshot) -> String {
+        if let paperClass = focus.paperClass { return "\(paperClass) · paper" }
         guard let anchor = focus.anchor else { return "—" }
         let how = focus.anchorIsManual ? "pinned" : (focus.anchorIsLocked ? "auto" : "auto, settling")
         return "\(anchor.taskName) · \(how)"
@@ -165,6 +169,10 @@ struct FocusTabView: View {
             Divider().overlay(Color.tpRule)
 
             documentSensing
+
+            Divider().overlay(Color.tpRule)
+
+            PaperPublishingSection(controller: controller, publisher: controller.paperPublisher)
         }
         .font(.system(size: 12))
     }

@@ -123,6 +123,8 @@ struct SettingsScreen: View {
 
     var body: some View {
         ThemedForm(title: "Settings") {
+            PaperClassesSection(controller: controller)
+
             Section {
                 NumberRow(label: "Warning at", value: controller.bind(\.warningThresholdMinutes), range: 0...60, unit: "min", tint: .tpWarning)
                 NumberRow(label: "Alert at", value: controller.bind(\.alertThresholdMinutes), range: 0...60, unit: "min", tint: .tpAlert)
@@ -182,13 +184,32 @@ struct AnalyticsScreen: View {
                 AnalyticsRow(title: "Last 5 days", window: controller.analytics.lastFiveDays)
             }
 
+            Section("Paper today") {
+                let today = controller.paperToday
+                if today.isEmpty {
+                    Text("No paper time today.")
+                        .foregroundStyle(Color.tpDimmed)
+                }
+                ForEach(today, id: \.className) { total in
+                    HStack {
+                        Text(total.className).foregroundStyle(Color.tpDimmed)
+                        Spacer()
+                        Text(PaperHistory.durationText(total.seconds))
+                            .font(.body.monospacedDigit())
+                    }
+                }
+                NavigationLink("Paper sittings") {
+                    PaperSittingsScreen(controller: controller)
+                }
+            }
+
             Section {
                 Button("Export CSV") { share(.csv) }
                 Button("Export JSON") { share(.json) }
             } header: {
                 Text("Export history")
             } footer: {
-                Text("\(controller.history.count) records, kept for 30 days.")
+                Text("\(controller.history.count) records, kept for 30 days (paper sittings for \(PaperHistory.retentionDays)).")
             }
         }
         .onAppear { controller.refreshAnalytics() }

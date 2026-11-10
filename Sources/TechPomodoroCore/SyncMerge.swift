@@ -55,6 +55,8 @@ public enum SyncMerge {
         merged.focus.enabled = local.focus.enabled
         merged.focus.serverURL = local.focus.serverURL
         merged.focus.documents.enabled = local.focus.documents.enabled
+        merged.paperPublishEnabled = local.paperPublishEnabled
+        merged.paperLogPath = local.paperLogPath
         return merged
     }
 

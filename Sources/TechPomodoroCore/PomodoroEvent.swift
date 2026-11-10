@@ -18,4 +18,8 @@ public enum PomodoroEvent: Sendable, Equatable {
     /// macOS woke. Under `continueThroughSleep` this fast-forwards the schedule.
     case didWake
     case settingsChanged(PomodoroSettings)
+    /// Tags the Work that follows (and the Work in progress) as paper time. Sticky: it survives every
+    /// phase boundary, pause and sleep, and is cleared only by `clearPaperTag` or `stop`.
+    case setPaperTag(PaperTag)
+    case clearPaperTag
 }

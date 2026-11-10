@@ -377,7 +377,9 @@ extension MirrorContent {
             mirroredFrom: state.mirroredFrom,
             nextPhase: state.nextPhase.map {
                 MirrorNextPhase(title: $0.title, startsAt: $0.startsAt, endsAt: $0.endsAt, progressLine: $0.progressLine, tintHex: $0.tintHex)
-            }
+            },
+            paperClass: state.paperClass,
+            paperKind: state.paperKind
         )
     }
 }
@@ -396,7 +398,9 @@ extension PomodoroActivityAttributes.ContentState {
             mirroredFrom: content.mirroredFrom,
             nextPhase: content.nextPhase.map {
                 .init(title: $0.title, startsAt: $0.startsAt, endsAt: $0.endsAt, progressLine: $0.progressLine, tintHex: $0.tintHex)
-            }
+            },
+            paperClass: content.paperClass,
+            paperKind: content.paperKind
         )
     }
 }

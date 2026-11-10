@@ -35,7 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         let controller = AppController(
             intervalStore: intervalStore,
-            settingsStore: UserDefaultsSettingsStore(defaults: .standard)
+            settingsStore: UserDefaultsSettingsStore(defaults: .standard),
+            correctionStore: (try? FilePaperCorrectionStore.applicationSupportURL())
+                .map { FilePaperCorrectionStore(url: $0) as any PaperCorrectionStoring } ?? MemoryPaperCorrectionStore()
         )
         self.controller = controller
 
@@ -53,6 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         controller.observeWorkspace()
         controller.startSync()
         controller.startDocumentSensor()
+        // Once at launch; afterwards on every change to the paper history, debounced.
+        controller.publishPaper()
     }
 
     @objc private func togglePopover() {

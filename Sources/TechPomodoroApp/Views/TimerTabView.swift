@@ -13,6 +13,8 @@ struct TimerTabView: View {
             LabeledRow(label: "Phase", value: controller.state.activity == .idle ? "Idle" : controller.state.phase.title)
             LabeledRow(label: "Sessions completed", value: String(controller.state.completedSessions))
 
+            PaperControl(controller: controller)
+
             if controller.settings.focus.enabled {
                 Divider().overlay(Color.tpRule)
 
@@ -64,6 +66,9 @@ struct AnalyticsPanel: View {
             window("Today", controller.analytics.today)
             window("Last 3 days", controller.analytics.lastThreeDays)
             window("Last 5 days", controller.analytics.lastFiveDays)
+            if let paper = controller.paperTodayLine {
+                LabeledRow(label: "Paper today", value: paper)
+            }
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 6).stroke(hovering ? Color.tpPrimary : Color.tpRule, lineWidth: 1))

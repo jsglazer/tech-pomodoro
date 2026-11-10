@@ -69,6 +69,18 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
     /// Mac: push this Mac's timer to the iPhone's Live Activity. iPhone: show a Mac's timer in place
     /// of its own while one is active. Per device, never synced.
     public var mirrorEnabled: Bool
+    /// The classes the paper tag offers, as class folder names exactly — the vault totals match on
+    /// them. Synced.
+    public var paperClasses: [String]
+    /// How many `PaperMigrations` have been applied. Synced, so each runs once across devices.
+    public var paperMigrationLevel: Int
+    /// Mac: publish paper sittings to ActivityWatch and the vault file. Per device, never synced:
+    /// only one Mac may publish, because aw-sync copies buckets between Macs.
+    public var paperPublishEnabled: Bool
+    /// Mac: the app-owned vault file the paper sittings are written to. Per device.
+    public var paperLogPath: String
+
+    public static let defaultPaperLogPath = "/Users/josh/VaultSchar/Classes/2026-B/Paper Log.json"
 
     public init(
         workMinutes: Int = 25,
@@ -97,7 +109,11 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         sleepBehavior: SleepBehavior = .resumeOnWake,
         focus: FocusSettings = FocusSettings(),
         cloudSyncEnabled: Bool = true,
-        mirrorEnabled: Bool = true
+        mirrorEnabled: Bool = true,
+        paperClasses: [String] = PaperDefaults.classes,
+        paperMigrationLevel: Int = PaperMigrations.latest,
+        paperPublishEnabled: Bool = false,
+        paperLogPath: String = PomodoroSettings.defaultPaperLogPath
     ) {
         self.workMinutes = workMinutes
         self.restMinutes = restMinutes
@@ -126,6 +142,10 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         self.focus = focus
         self.cloudSyncEnabled = cloudSyncEnabled
         self.mirrorEnabled = mirrorEnabled
+        self.paperClasses = paperClasses
+        self.paperMigrationLevel = paperMigrationLevel
+        self.paperPublishEnabled = paperPublishEnabled
+        self.paperLogPath = paperLogPath
     }
 
     /// A phase's configured length. Never zero: a phase of no length would let the reducer's
@@ -176,7 +196,49 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
             sleepBehavior: try value(.sleepBehavior, d.sleepBehavior),
             focus: try value(.focus, d.focus),
             cloudSyncEnabled: try value(.cloudSyncEnabled, d.cloudSyncEnabled),
-            mirrorEnabled: try value(.mirrorEnabled, d.mirrorEnabled)
+            mirrorEnabled: try value(.mirrorEnabled, d.mirrorEnabled),
+            // Missing means "written before paper time existed": the migration fills the list.
+            paperClasses: try value(.paperClasses, []),
+            paperMigrationLevel: try value(.paperMigrationLevel, 0),
+            paperPublishEnabled: try value(.paperPublishEnabled, d.paperPublishEnabled),
+            paperLogPath: try value(.paperLogPath, d.paperLogPath)
         )
+    }
+}
+
+/// One-time changes to the paper settings, tracked by `PomodoroSettings.paperMigrationLevel`.
+public enum PaperMigrations {
+    /// 1 — the class list starts as the 2026-B class folders.
+    public static let latest = 1
+
+    /// The migrated settings, or nil when they are already up to date. Only ever adds.
+    public static func migrate(_ settings: PomodoroSettings) -> PomodoroSettings? {
+        guard settings.paperMigrationLevel < latest else { return nil }
+        var s = settings
+        if s.paperMigrationLevel < 1 {
+            for name in PaperDefaults.classes where !s.paperClasses.contains(name) {
+                s.paperClasses.append(name)
+            }
+        }
+        s.paperMigrationLevel = latest
+        return s
+    }
+}
+
+/// Every pending one-time settings migration, focus and paper alike.
+public enum SettingsMigrations {
+    /// The migrated settings, or nil when nothing was pending.
+    public static func migrate(_ settings: PomodoroSettings) -> PomodoroSettings? {
+        var s = settings
+        var changed = false
+        if let focus = FocusMigrations.migrate(s.focus) {
+            s.focus = focus
+            changed = true
+        }
+        if let paper = PaperMigrations.migrate(s) {
+            s = paper
+            changed = true
+        }
+        return changed ? s : nil
     }
 }
