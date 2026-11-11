@@ -11,7 +11,7 @@ on:
 jobs:
   analyze:
     name: Analyze (swift)
-    runs-on: macos-15
+    runs-on: macos-26
     permissions:
       actions: read
       contents: read

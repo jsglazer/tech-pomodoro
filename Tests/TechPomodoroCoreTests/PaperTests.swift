@@ -31,7 +31,7 @@ struct PaperTagTests {
         // Through rep 1, rest, rep 2, rest, rep 3, the long break and into cycle 2's first Work.
         // Hoisted and typed: inline, this literal arithmetic inside the tuple array was too much for
         // the CI runner's type checker ("unable to type-check this expression in reasonable time").
-        let intoCycleTwo: Double = 25 * 3 + 5 * 2 + 15 + 1
+        let intoCycleTwo = Double(25 * 3 + 5 * 2 + 15 + 1)
         let steps: [(PomodoroEvent, Date)] = [
             (.setPaperTag(data), at(0)),
             (.start, at(0)),
