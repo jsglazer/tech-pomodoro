@@ -28,12 +28,16 @@ struct PaperTagTests {
     @Test("A tag set while idle applies from the next Start and survives every phase boundary")
     func stickyAcrossPhases() {
         // 25/5 × 3 reps, 15 long break, 2 cycles, 60 session rest.
-        let (state, records) = run(PomodoroState(settings: Fixture.settings()), [
+        // Through rep 1, rest, rep 2, rest, rep 3, the long break and into cycle 2's first Work.
+        // Hoisted and typed: inline, this literal arithmetic inside the tuple array was too much for
+        // the CI runner's type checker ("unable to type-check this expression in reasonable time").
+        let intoCycleTwo: Double = 25 * 3 + 5 * 2 + 15 + 1
+        let steps: [(PomodoroEvent, Date)] = [
             (.setPaperTag(data), at(0)),
             (.start, at(0)),
-            // Through rep 1, rest, rep 2, rest, rep 3, the long break and into cycle 2's first Work.
-            (.tick, at(25 * 3 + 5 * 2 + 15 + 1))
-        ])
+            (.tick, at(intoCycleTwo))
+        ]
+        let (state, records) = run(PomodoroState(settings: Fixture.settings()), steps)
         #expect(state.paperTag == data)
         #expect(state.phase == .work)
         let work = records.filter { $0.kind == .work }
