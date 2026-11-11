@@ -8,28 +8,51 @@ public enum AnalyticsExporter {
 
     public static func csv(records: [IntervalRecord]) -> String {
         let formatter = ISO8601DateFormatter()
-        let rows = records.map { record in
-            [
-                record.id.uuidString,
-                record.kind.rawValue,
-                formatter.string(from: record.startedAt),
-                String(record.elapsedSeconds),
-                record.completed ? "true" : "false",
-                field(record.focus?.anchorArea),
-                field(record.focus?.anchorTask),
-                record.focus?.focusShare.map { String(format: "%.3f", $0) } ?? "",
-                record.focus.map { String($0.switches) } ?? "",
-                record.focus.map { String($0.distractionSeconds) } ?? "",
-                record.focus.map { String($0.driftAlerts) } ?? "",
-                field(record.paper?.className),
-                record.paper?.kind.title ?? "",
-                field(record.paper?.note),
-                record.paper.map { String(Int($0.seconds.rounded())) } ?? "",
-                record.focus?.paperOverlapSeconds.map(String.init) ?? "",
-                record.isManual ? "true" : ""
-            ].joined(separator: ",")
+        let rows: [String] = records.map { record -> String in
+            csvRow(record, formatter: formatter)
         }
         return ([csvHeader] + rows).joined(separator: "\n") + "\n"
+    }
+
+    /// One CSV line per record. Built as three typed groups rather than one array literal: a single
+    /// 17-element literal mixing optional chains and `??` was too much for the Swift type checker
+    /// on the CI runner ("unable to type-check this expression in reasonable time").
+    static func csvRow(_ record: IntervalRecord, formatter: ISO8601DateFormatter) -> String {
+        let base: [String] = [
+            record.id.uuidString,
+            record.kind.rawValue,
+            formatter.string(from: record.startedAt),
+            String(record.elapsedSeconds),
+            record.completed ? "true" : "false"
+        ]
+        return (base + focusColumns(record.focus) + paperColumns(record)).joined(separator: ",")
+    }
+
+    static func focusColumns(_ focus: FocusSummary?) -> [String] {
+        guard let focus else { return ["", "", "", "", "", ""] }
+        let share: String = focus.focusShare.map { String(format: "%.3f", $0) } ?? ""
+        return [
+            field(focus.anchorArea),
+            field(focus.anchorTask),
+            share,
+            String(focus.switches),
+            String(focus.distractionSeconds),
+            String(focus.driftAlerts)
+        ]
+    }
+
+    static func paperColumns(_ record: IntervalRecord) -> [String] {
+        let paper = record.paper
+        let seconds: String = paper.map { String(Int($0.seconds.rounded())) } ?? ""
+        let overlap: String = record.focus?.paperOverlapSeconds.map { String($0) } ?? ""
+        return [
+            field(paper?.className),
+            paper?.kind.title ?? "",
+            field(paper?.note),
+            seconds,
+            overlap,
+            record.isManual ? "true" : ""
+        ]
     }
 
     /// Folder names can hold commas and quotes, so text fields are quoted per RFC 4180.
