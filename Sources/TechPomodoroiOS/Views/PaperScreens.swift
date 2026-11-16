@@ -58,12 +58,24 @@ struct PaperPanel: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                if tag != nil {
+                if tag != nil, controller.stopwatch == nil {
                     Text(statusText)
                         .font(.caption)
                         .foregroundStyle(Color.tpPrimary)
                     Button("Clear", role: .destructive) { apply(nil) }
                 }
+            }
+
+            if controller.stopwatch != nil {
+                StopwatchRow(controller: controller)
+            } else if tag != nil, controller.state.activity == .idle, controller.otherDeviceTimerName == nil {
+                Button {
+                    controller.startStopwatch()
+                } label: {
+                    Label("Track without the timer", systemImage: "stopwatch")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
             }
 
             if tag != nil {
@@ -123,6 +135,40 @@ struct PaperPanel: View {
             return
         }
         controller.setPaperTag(new)
+    }
+}
+
+/// Paper time tracked without the timer: the time so far, Pause or Resume, Stop (saves) and Discard.
+private struct StopwatchRow: View {
+    @ObservedObject var controller: PomodoroController
+    @State private var confirmingDiscard = false
+
+    var body: some View {
+        if let watch = controller.stopwatch {
+            VStack(spacing: 10) {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Label(PaperStopwatch.elapsedText(watch.seconds(at: context.date)), systemImage: "stopwatch")
+                        .font(.system(size: 28, weight: .medium, design: .monospaced))
+                        .foregroundStyle(watch.isRunning ? Color.tpPrimary : Color.tpAlert)
+                }
+                HStack(spacing: 10) {
+                    Button(watch.isRunning ? "Pause" : "Resume") { controller.toggleStopwatchPause() }
+                        .buttonStyle(.bordered)
+                        .tint(watch.isRunning ? .tpWarning : .tpSuccess)
+                    Button("Stop & save") { controller.stopStopwatch() }
+                        .buttonStyle(.borderedProminent)
+                    Button(role: .destructive) { confirmingDiscard = true } label: { Image(systemName: "trash") }
+                        .buttonStyle(.bordered)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .alert("Discard this tracked time?", isPresented: $confirmingDiscard) {
+                Button("Discard", role: .destructive) { controller.discardStopwatch() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Nothing is saved. Stop & save keeps it as a paper sitting instead.")
+            }
+        }
     }
 }
 

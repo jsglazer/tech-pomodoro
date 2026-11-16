@@ -30,6 +30,8 @@ final class AppController: ObservableObject {
     @Published private(set) var paperCorrections: [PaperCorrection] = []
     /// The end-of-Work dialog's paper line, e.g. `Paper · Data · Read · 25 min`.
     @Published private(set) var lastPaperLine: String?
+    /// Paper time tracked without the timer, while it runs or is paused; nil otherwise.
+    @Published private(set) var stopwatch: PaperStopwatch?
 
     /// Republished once a second purely so SwiftUI re-renders the countdown.
     ///
@@ -56,6 +58,7 @@ final class AppController: ObservableObject {
     private let loginItem: any LoginItemControlling
     private let paperTagStore: any PaperTagStoring
     private let correctionStore: any PaperCorrectionStoring
+    private let stopwatchStore: any PaperStopwatchStoring
     private weak var presenter: StatusItemPresenter?
 
     /// Writes paper sittings to ActivityWatch and the vault, when this Mac's switch is on.
@@ -113,7 +116,8 @@ final class AppController: ObservableObject {
         popupPresenter: any PopupPresenting = NSAlertPopupPresenter(),
         loginItem: any LoginItemControlling = SMAppServiceLoginItem(),
         paperTagStore: any PaperTagStoring = UserDefaultsPaperTagStore(defaults: .standard),
-        correctionStore: any PaperCorrectionStoring = MemoryPaperCorrectionStore()
+        correctionStore: any PaperCorrectionStoring = MemoryPaperCorrectionStore(),
+        stopwatchStore: any PaperStopwatchStoring = UserDefaultsPaperStopwatchStore(defaults: .standard)
     ) {
         self.dateProvider = dateProvider
         self.calendar = calendar
@@ -125,6 +129,8 @@ final class AppController: ObservableObject {
         self.loginItem = loginItem
         self.paperTagStore = paperTagStore
         self.correctionStore = correctionStore
+        self.stopwatchStore = stopwatchStore
+        self.stopwatch = stopwatchStore.load()
         let start = dateProvider.now()
         self.displayNow = start
         self.now = start
@@ -279,6 +285,8 @@ final class AppController: ObservableObject {
         // nothing needs to reduce while that alert is up, and doing so would corrupt the state this
         // very reduction is about to read back out of `handle(effects:)`.
         guard !isPresentingPopup else { return }
+        // The stopwatch and the timer never run together: one sitting would be logged twice.
+        if stopwatch != nil, state.activity == .idle, event == .start || event == .toggleRunning { return }
         let now = dateProvider.now()
         self.now = now
         if isPopoverVisible { displayNow = now }
@@ -523,6 +531,16 @@ final class AppController: ObservableObject {
     }
 
     private func refreshPresentation() {
+        if let stopwatch, state.activity == .idle {
+            presenter?.apply(MenuBarFormatter.stopwatchPresentation(stopwatch, at: now, settings: settings))
+            let text = "\(stopwatch.tag.label) · \(PaperStopwatch.elapsedText(stopwatch.seconds(at: now)))"
+            presenter?.setTooltip("Tracking " + text)
+            presenter?.setHoverInfo(HoverInfo(
+                title: stopwatch.isRunning ? "Tracking — \(stopwatch.tag.shortLabel)" : "Tracking paused — \(stopwatch.tag.shortLabel)",
+                detail: PaperStopwatch.elapsedText(stopwatch.seconds(at: now))
+            ))
+            return
+        }
         if let phone = phoneDisplay {
             // The iPhone's timer, drawn like this Mac's own; the hover says whose it is.
             presenter?.apply(MenuBarFormatter.presentation(for: phone.state, at: now, focus: nil))
@@ -569,6 +587,47 @@ final class AppController: ObservableObject {
     /// Sets the paper tag. During Work a change of class or kind splits the record (see the reducer).
     func setPaperTag(_ tag: PaperTag) {
         send(.setPaperTag(tag))
+        // Retagging while tracking files the tracked sitting under the new class, kind or note.
+        if var watch = stopwatch, watch.tag != tag {
+            watch.tag = tag
+            setStopwatch(watch)
+        }
+    }
+
+    // MARK: - Stopwatch
+
+    /// Starts tracking paper time without the timer, under the current paper tag. Idle timer only.
+    func startStopwatch() {
+        guard stopwatch == nil, state.activity == .idle, let tag = state.paperTag else { return }
+        setStopwatch(PaperStopwatch(tag: tag, startedAt: dateProvider.now()))
+    }
+
+    func toggleStopwatchPause() {
+        guard var watch = stopwatch else { return }
+        let now = dateProvider.now()
+        if watch.isRunning { watch.pause(at: now) } else { watch.resume(at: now) }
+        setStopwatch(watch)
+    }
+
+    /// Ends tracking and saves what was tracked as a paper sitting.
+    func stopStopwatch() {
+        guard let watch = stopwatch else { return }
+        let now = dateProvider.now()
+        setStopwatch(nil)
+        if let record = watch.record(at: now) {
+            persist(records: [record], at: now)
+        }
+    }
+
+    /// Ends tracking without saving anything.
+    func discardStopwatch() {
+        setStopwatch(nil)
+    }
+
+    private func setStopwatch(_ watch: PaperStopwatch?) {
+        stopwatch = watch
+        stopwatchStore.save(watch)
+        refreshPresentation()
     }
 
     func clearPaperTag() {

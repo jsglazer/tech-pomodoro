@@ -97,7 +97,7 @@ private struct CountdownHeader: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Text(state.activity == .idle ? "Ready" : (state.phase == .work && state.paperTag != nil ? "PAPER" : state.phase.title.uppercased()))
+            Text(state.activity == .idle ? (controller.stopwatch != nil && phone == nil ? "Tracking" : "Ready") : (state.phase == .work && state.paperTag != nil ? "PAPER" : state.phase.title.uppercased()))
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(1.4)
                 .foregroundStyle(Color.tpDimmed)
@@ -138,9 +138,11 @@ private struct CountdownHeader: View {
                 // Left slot: Start when idle, and Stop takes that same place once running — so the
                 // button you reach for first is always on the left.
                 if ownActivity == .idle {
-                    ControlButton(title: "Start", enabled: true) {
+                    // Off while the paper stopwatch tracks: the two would log one sitting twice.
+                    ControlButton(title: "Start", enabled: controller.stopwatch == nil) {
                         controller.send(.start)
                     }
+                    .help(controller.stopwatch == nil ? "" : "Stop the paper stopwatch first")
                 } else {
                     // Stop throws away the place in the schedule, so it asks first.
                     ControlButton(title: "Stop", enabled: true) {

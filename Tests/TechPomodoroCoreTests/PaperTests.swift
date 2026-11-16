@@ -250,15 +250,17 @@ struct PaperFocusTests {
         #expect(snapshot.summary(level: .task, driftAlerts: 0).paperOverlapSeconds == 300)
     }
 
-    @Test("Another class's notes drift; away time stays neutral and never raises drift")
-    func otherClassDrifts() {
+    @Test("Paper time never drifts: another class's notes count as off the class but raise no drift, and away time stays neutral")
+    func paperNeverDrifts() {
         let activity = FocusActivity(
             windows: [WindowSpan(start: s(0), end: s(400), app: "Obsidian", title: "")],
             notes: [NoteSpan(start: s(0), end: s(60), file: dataNote), NoteSpan(start: s(60), end: s(400), file: econNote)],
             away: [AwaySpan(start: s(400), end: s(1200))]
         )
-        let drifting = FocusTracker.snapshot(activity: activity, from: s(0), to: s(300), settings: settings, paperClass: "Data - POGO 511")
-        #expect(drifting.offAnchorSeconds == 240)
+        let other = FocusTracker.snapshot(activity: activity, from: s(0), to: s(300), settings: settings, paperClass: "Data - POGO 511")
+        #expect(other.offAnchorSeconds == 0)
+        #expect(!other.isDrifting)
+        #expect(other.anchorSeconds(level: settings.driftLevel) == 60)
 
         let reading = FocusActivity(
             windows: [WindowSpan(start: s(0), end: s(30), app: "Obsidian", title: "")],

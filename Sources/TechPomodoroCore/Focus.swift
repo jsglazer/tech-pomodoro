@@ -427,8 +427,11 @@ public enum FocusTracker {
             last = k
         }
 
+        // Paper time (Read, Write, Practice, Watch) is away from the screen by design, so drift is not
+        // judged at all: no off-anchor streak, so no drift colour, alert or count. The on-screen time
+        // is still kept, for the overlap line.
         var streak: TimeInterval = 0
-        for run in runs.reversed() {
+        for run in runs.reversed() where paperClass == nil {
             if run.category == .neutral { continue }
             guard isOff(run.category) else { break }
             streak += run.duration

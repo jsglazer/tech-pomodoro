@@ -33,6 +33,8 @@ final class PomodoroController: ObservableObject {
     @Published private(set) var mirror: MirrorContent?
     /// Paper corrections (edits and deletions), applied when the history is read.
     @Published private(set) var paperCorrections: [PaperCorrection] = []
+    /// Paper time tracked without the timer, while it runs or is paused; nil otherwise.
+    @Published private(set) var stopwatch: PaperStopwatch?
 
     let soundCatalog: BundledSoundCatalog
 
@@ -43,6 +45,7 @@ final class PomodoroController: ObservableObject {
     private let snapshotStore: SessionSnapshotStore?
     private let paperTagStore: any PaperTagStoring
     private let correctionStore: any PaperCorrectionStoring
+    private let stopwatchStore: any PaperStopwatchStoring
     private let soundPlayer: any SoundPlaying
     private let scheduler = NotificationScheduler()
     private let liveActivity = LiveActivityController()
@@ -74,6 +77,7 @@ final class PomodoroController: ObservableObject {
         snapshotStore: SessionSnapshotStore?,
         paperTagStore: any PaperTagStoring = UserDefaultsPaperTagStore(defaults: .standard),
         correctionStore: any PaperCorrectionStoring = MemoryPaperCorrectionStore(),
+        stopwatchStore: any PaperStopwatchStoring = UserDefaultsPaperStopwatchStore(defaults: .standard),
         soundPlayer: any SoundPlaying = BundledSoundPlayer(),
         soundCatalog: BundledSoundCatalog = BundledSoundCatalog()
     ) {
@@ -84,6 +88,8 @@ final class PomodoroController: ObservableObject {
         self.snapshotStore = snapshotStore
         self.paperTagStore = paperTagStore
         self.correctionStore = correctionStore
+        self.stopwatchStore = stopwatchStore
+        self.stopwatch = stopwatchStore.load()
         self.soundPlayer = soundPlayer
         self.soundCatalog = soundCatalog
 
@@ -194,6 +200,8 @@ final class PomodoroController: ObservableObject {
     // MARK: - Events
 
     func send(_ event: PomodoroEvent) {
+        // The stopwatch and the timer never run together: one sitting would be logged twice.
+        if stopwatch != nil, state.activity == .idle, event == .start || event == .toggleRunning { return }
         let now = dateProvider.now()
         let before = ScheduleKey(state)
         let next = PomodoroReducer.reduce(state, event, now)
@@ -426,6 +434,46 @@ final class PomodoroController: ObservableObject {
 
     func setPaperTag(_ tag: PaperTag) {
         send(.setPaperTag(tag))
+        // Retagging while tracking files the tracked sitting under the new class, kind or note.
+        if var watch = stopwatch, watch.tag != tag {
+            watch.tag = tag
+            setStopwatch(watch)
+        }
+    }
+
+    // MARK: - Stopwatch
+
+    /// Starts tracking paper time without the timer, under the current paper tag. Idle timer only.
+    func startStopwatch() {
+        guard stopwatch == nil, state.activity == .idle, let tag = state.paperTag else { return }
+        setStopwatch(PaperStopwatch(tag: tag, startedAt: dateProvider.now()))
+    }
+
+    func toggleStopwatchPause() {
+        guard var watch = stopwatch else { return }
+        let now = dateProvider.now()
+        if watch.isRunning { watch.pause(at: now) } else { watch.resume(at: now) }
+        setStopwatch(watch)
+    }
+
+    /// Ends tracking and saves what was tracked as a paper sitting.
+    func stopStopwatch() {
+        guard let watch = stopwatch else { return }
+        let now = dateProvider.now()
+        setStopwatch(nil)
+        if let record = watch.record(at: now) {
+            persist(records: [record], at: now)
+        }
+    }
+
+    /// Ends tracking without saving anything.
+    func discardStopwatch() {
+        setStopwatch(nil)
+    }
+
+    private func setStopwatch(_ watch: PaperStopwatch?) {
+        stopwatch = watch
+        stopwatchStore.save(watch)
     }
 
     func clearPaperTag() {

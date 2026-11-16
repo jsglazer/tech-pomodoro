@@ -84,7 +84,8 @@ private struct TimerPanel: View {
             HStack(spacing: 12) {
                 // Left: Start when idle, Stop in the same place once running — as on the Mac.
                 if state.activity == .idle {
-                    ControlButton(title: "Start", systemImage: "play.fill", enabled: true) {
+                    // Off while the paper stopwatch tracks: the two would log one sitting twice.
+                    ControlButton(title: "Start", systemImage: "play.fill", enabled: controller.stopwatch == nil) {
                         controller.send(.start)
                     }
                 } else {
