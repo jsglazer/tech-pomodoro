@@ -13,16 +13,22 @@ public enum PaperKind: String, Codable, Sendable, CaseIterable, Identifiable {
     case write
     case practice
     case watch
+    /// A class meeting, read from the calendar on the publishing Mac. Never offered on the tag.
+    case classMeeting = "class"
 
     public var id: String { rawValue }
 
-    /// `Read`, `Write`, `Practice`, `Watch` — also the form written to the vault file.
+    /// The kinds the paper tag, the stopwatch and the sitting forms offer.
+    public static let pickable: [PaperKind] = [.read, .write, .practice, .watch]
+
+    /// `Read`, `Write`, `Practice`, `Watch`, `Class` — also the form written to the vault file.
     public var title: String {
         switch self {
         case .read: return "Read"
         case .write: return "Write"
         case .practice: return "Practice"
         case .watch: return "Watch"
+        case .classMeeting: return "Class"
         }
     }
 
@@ -160,6 +166,8 @@ public struct PaperSittingView: Sendable, Equatable, Identifiable {
     public let manual: Bool
     /// The record's own elapsed time (timed sittings) or the span total (manual ones).
     public let seconds: Int
+    /// A class meeting from the calendar, derived at publish time; never a history record.
+    public var fromCalendar: Bool = false
 
     public var start: Date { spans.map(\.start).min() ?? .distantPast }
     public var end: Date { spans.map(\.end).max() ?? .distantPast }
@@ -235,6 +243,24 @@ public enum PaperHistory {
         guard let start = AnalyticsAggregator.startOfWindow(now: now, calendar: calendar, days: days) else { return [] }
         var totals: [String: Int] = [:]
         for sitting in sittings(records: records, corrections: corrections) where sitting.start >= start {
+            totals[sitting.className, default: 0] += sitting.seconds
+        }
+        return totals
+            .map { (className: $0.key, seconds: $0.value) }
+            .sorted { $0.seconds == $1.seconds ? $0.className < $1.className : $0.seconds > $1.seconds }
+    }
+
+    /// Seconds per class over the calendar-day window for any list of sittings (paper and class
+    /// meetings alike), most first.
+    public static func totals(
+        sittings: [PaperSittingView],
+        now: Date,
+        calendar: Calendar,
+        days: Int
+    ) -> [(className: String, seconds: Int)] {
+        guard let start = AnalyticsAggregator.startOfWindow(now: now, calendar: calendar, days: days) else { return [] }
+        var totals: [String: Int] = [:]
+        for sitting in sittings where sitting.start >= start {
             totals[sitting.className, default: 0] += sitting.seconds
         }
         return totals

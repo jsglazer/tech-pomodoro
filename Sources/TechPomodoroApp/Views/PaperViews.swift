@@ -21,7 +21,7 @@ struct PaperControl: View {
         VStack(alignment: .leading, spacing: 6) {
             // The kind, always one click away: Read, Write, Practice, Watch.
             HStack(spacing: 4) {
-                ForEach(PaperKind.allCases) { option in
+                ForEach(PaperKind.pickable) { option in
                     let selected = option == kind
                     Button {
                         select(option)
@@ -218,14 +218,15 @@ struct PaperTabView: View {
                                 SittingForm(
                                     classes: controller.settings.paperClasses,
                                     initial: .init(sitting),
-                                    timesEditable: sitting.manual,
+                                    timesEditable: sitting.manual || sitting.fromCalendar,
+                                    classAndKindEditable: !sitting.fromCalendar,
                                     actionTitle: "Save",
                                     onCancel: { editing = nil }
                                 ) { form in
                                     controller.editPaperSitting(
                                         sitting.id, className: form.className, kind: form.kind, note: form.note,
-                                        start: sitting.manual ? form.span.start : nil,
-                                        end: sitting.manual ? form.span.end : nil
+                                        start: sitting.manual || sitting.fromCalendar ? form.span.start : nil,
+                                        end: sitting.manual || sitting.fromCalendar ? form.span.end : nil
                                     )
                                     editing = nil
                                 }
@@ -261,7 +262,7 @@ private struct SittingRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
             VStack(alignment: .leading, spacing: 1) {
-                Text("\(PaperTag.shortClass(sitting.className)) · \(sitting.kind.title) · \(PaperHistory.durationText(sitting.seconds))")
+                Text("\(sitting.fromCalendar ? "📅 " : "")\(PaperTag.shortClass(sitting.className)) · \(sitting.kind.title) · \(PaperHistory.durationText(sitting.seconds))")
                 Text(Self.timeText(sitting) + (sitting.manual ? " · logged" : "") + (sitting.note.map { " · \($0)" } ?? ""))
                     .font(.caption2)
                     .foregroundStyle(Color.tpDimmed)
@@ -320,6 +321,8 @@ struct SittingFormValue {
 struct SittingForm: View {
     let classes: [String]
     let timesEditable: Bool
+    /// False for a class meeting: its class comes from the calendar and its kind is always Class.
+    var classAndKindEditable = true
     let actionTitle: String
     var onCancel: (() -> Void)?
     let onSave: (SittingFormValue) -> Void
@@ -329,12 +332,14 @@ struct SittingForm: View {
         classes: [String],
         initial: SittingFormValue,
         timesEditable: Bool,
+        classAndKindEditable: Bool = true,
         actionTitle: String,
         onCancel: (() -> Void)? = nil,
         onSave: @escaping (SittingFormValue) -> Void
     ) {
         self.classes = classes
         self.timesEditable = timesEditable
+        self.classAndKindEditable = classAndKindEditable
         self.actionTitle = actionTitle
         self.onCancel = onCancel
         self.onSave = onSave
@@ -343,14 +348,20 @@ struct SittingForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker("Class", selection: $value.className) {
-                ForEach(choices, id: \.self) { Text($0).tag($0) }
+            if classAndKindEditable {
+                Picker("Class", selection: $value.className) {
+                    ForEach(choices, id: \.self) { Text($0).tag($0) }
+                }
+                Picker("", selection: $value.kind) {
+                    ForEach(PaperKind.pickable) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            } else {
+                Text("📅 \(value.className) · \(value.kind.title) — from the calendar")
+                    .font(.caption)
+                    .foregroundStyle(Color.tpDimmed)
             }
-            Picker("", selection: $value.kind) {
-                ForEach(PaperKind.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             if timesEditable {
                 DatePicker("Start", selection: $value.start, displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.stepperField)
@@ -483,6 +494,9 @@ struct PaperPublishingSection: View {
                 "Turn this on on one Mac only.",
                 detail: "Writes every paper sitting to the aw-watcher-paper bucket and rewrites the file above whole. aw-sync copies ActivityWatch buckets between Macs, so two publishing Macs would count every sitting twice."
             )
+            ClassMeetingsSection(controller: controller, reader: controller.classCalendar)
+                .disabled(!controller.settings.paperPublishEnabled)
+                .opacity(controller.settings.paperPublishEnabled ? 1 : 0.4)
         }
     }
 
@@ -516,6 +530,62 @@ struct PaperPublishingSection: View {
             panel.beginSheetModal(for: window, completionHandler: apply)
         } else {
             apply(panel.runModal())
+        }
+    }
+}
+
+/// Class meetings from the calendar, under Publishing. Per device, off by default; counted only while
+/// this Mac publishes.
+struct ClassMeetingsSection: View {
+    @ObservedObject var controller: AppController
+    @ObservedObject var reader: ClassCalendarReader
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("Count class meetings", isOn: controller.bind(\.paperMeetingsEnabled))
+                .toggleStyle(.switch)
+            Picker("Calendar", selection: controller.bind(\.paperMeetingsCalendar)) {
+                ForEach(calendarChoices, id: \.self) { Text($0).tag($0) }
+            }
+            .disabled(!controller.settings.paperMeetingsEnabled || reader.status.access != .granted)
+            if controller.settings.paperMeetingsEnabled {
+                if reader.status.access == .notDetermined {
+                    Button("Allow calendar access…") { reader.requestAccess() }
+                }
+                InfoCaption(statusText, color: statusIsProblem ? .orange : .tpDimmed)
+            }
+            InfoCaption(
+                "Adds each class's meetings to its total, as Class.",
+                detail: "An event counts for the class whose course code is in its title — \"Data Analysis POGO 511\" counts for Data - POGO 511. All-day, cancelled, declined and future events are skipped; a class in progress counts up to now. Delete a meeting in the sittings list for a class you skipped, or edit its times if you left early. A paper sitting of the same class during a meeting counts once, as Class."
+            )
+        }
+    }
+
+    /// This Mac's calendars, plus the chosen one if it isn't (yet) among them.
+    private var calendarChoices: [String] {
+        let chosen = controller.settings.paperMeetingsCalendar
+        return reader.calendarTitles.contains(chosen) ? reader.calendarTitles : [chosen] + reader.calendarTitles
+    }
+
+    private var statusIsProblem: Bool {
+        reader.status.access == .denied || reader.status.calendarFound == false
+    }
+
+    private var statusText: String {
+        let s = reader.status
+        switch s.access {
+        case .notDetermined:
+            return "Calendar access not asked yet."
+        case .denied:
+            return "No calendar access — allow TechPomodoro in System Settings → Privacy & Security → Calendars."
+        case .granted:
+            guard let found = s.calendarFound else { return "Access granted · not read yet" }
+            guard found else { return "No calendar named \"\(controller.settings.paperMeetingsCalendar)\" on this Mac." }
+            var parts = ["Access granted", "\(s.counted) \(s.counted == 1 ? "meeting" : "meetings") counted"]
+            if s.unmatched > 0 { parts.append("\(s.unmatched) matched no class") }
+            if s.ambiguous > 0 { parts.append("\(s.ambiguous) matched two classes") }
+            if let last = s.lastRead { parts.append("read \(last.formatted(date: .omitted, time: .shortened))") }
+            return parts.joined(separator: " · ")
         }
     }
 }

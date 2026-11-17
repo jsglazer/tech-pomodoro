@@ -57,6 +57,8 @@ public enum SyncMerge {
         merged.focus.documents.enabled = local.focus.documents.enabled
         merged.paperPublishEnabled = local.paperPublishEnabled
         merged.paperLogPath = local.paperLogPath
+        merged.paperMeetingsEnabled = local.paperMeetingsEnabled
+        merged.paperMeetingsCalendar = local.paperMeetingsCalendar
         return merged
     }
 

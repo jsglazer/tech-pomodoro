@@ -19,6 +19,8 @@ public enum PaperPublishing {
             public var kind: String
             public var note: String
             public var record_id: String
+            /// `app` (a paper sitting) or `calendar` (a class meeting).
+            public var source: String
         }
         public var timestamp: String
         public var duration: Double
@@ -33,7 +35,8 @@ public enum PaperPublishing {
                 class: sitting.className,
                 kind: sitting.kind.title,
                 note: sitting.note ?? "",
-                record_id: sitting.id.uuidString
+                record_id: sitting.id.uuidString,
+                source: source(sitting)
             )
             for span in sitting.spans {
                 let event = AWEvent(timestamp: iso.string(from: span.start), duration: span.duration, data: payload)
@@ -65,7 +68,7 @@ public enum PaperPublishing {
         /// `yyyy-MM-dd`, local.
         public var date: String
         public var `class`: String
-        /// `Read`, `Write`, `Practice`, `Watch`.
+        /// `Read`, `Write`, `Practice`, `Watch`, `Class`.
         public var kind: String
         /// `HH:mm`, local.
         public var start: String
@@ -74,6 +77,9 @@ public enum PaperPublishing {
         public var note: String
         /// `[[startISO, endISO], …]`.
         public var spans: [[String]]
+        /// `app` (a paper sitting) or `calendar` (a class meeting). Added in 1.0.30; the format
+        /// stays version 1 because the field is only added.
+        public var source: String
     }
 
     public static func vaultFile(_ sittings: [PaperSittingView], generated: Date, calendar: Calendar) -> VaultFile {
@@ -92,7 +98,8 @@ public enum PaperPublishing {
                     end: time.string(from: s.end),
                     minutes: Int((Double(s.seconds) / 60).rounded()),
                     note: s.note ?? "",
-                    spans: s.spans.map { [iso.string(from: $0.start), iso.string(from: $0.end)] }
+                    spans: s.spans.map { [iso.string(from: $0.start), iso.string(from: $0.end)] },
+                    source: source(s)
                 )
             }
         return VaultFile(version: 1, generated: iso.string(from: generated), sittings: rows)
@@ -113,12 +120,18 @@ public enum PaperPublishing {
             hasher.combine(s.kind)
             hasher.combine(s.note)
             hasher.combine(s.seconds)
+            hasher.combine(s.fromCalendar)
             for span in s.spans {
                 hasher.combine(span.start)
                 hasher.combine(span.end)
             }
         }
         return hasher.finalize()
+    }
+
+    /// `calendar` for a class meeting, `app` otherwise.
+    public static func source(_ sitting: PaperSittingView) -> String {
+        sitting.fromCalendar ? "calendar" : "app"
     }
 
     static func isoFormatter() -> ISO8601DateFormatter {

@@ -79,6 +79,13 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
     public var paperPublishEnabled: Bool
     /// Mac: the app-owned vault file the paper sittings are written to. Per device.
     public var paperLogPath: String
+    /// Mac: count class meetings from the calendar below toward each class's total, when publishing.
+    /// Per device, never synced.
+    public var paperMeetingsEnabled: Bool
+    /// Mac: the calendar the class meetings are read from, by title. Per device.
+    public var paperMeetingsCalendar: String
+
+    public static let defaultPaperMeetingsCalendar = "Josh-School"
 
     public static let defaultPaperLogPath = "/Users/josh/VaultSchar/Classes/2026-B/Paper Log.json"
 
@@ -113,7 +120,9 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         paperClasses: [String] = PaperDefaults.classes,
         paperMigrationLevel: Int = PaperMigrations.latest,
         paperPublishEnabled: Bool = false,
-        paperLogPath: String = PomodoroSettings.defaultPaperLogPath
+        paperLogPath: String = PomodoroSettings.defaultPaperLogPath,
+        paperMeetingsEnabled: Bool = false,
+        paperMeetingsCalendar: String = PomodoroSettings.defaultPaperMeetingsCalendar
     ) {
         self.workMinutes = workMinutes
         self.restMinutes = restMinutes
@@ -146,6 +155,8 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
         self.paperMigrationLevel = paperMigrationLevel
         self.paperPublishEnabled = paperPublishEnabled
         self.paperLogPath = paperLogPath
+        self.paperMeetingsEnabled = paperMeetingsEnabled
+        self.paperMeetingsCalendar = paperMeetingsCalendar
     }
 
     /// A phase's configured length. Never zero: a phase of no length would let the reducer's
@@ -201,7 +212,9 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
             paperClasses: try value(.paperClasses, []),
             paperMigrationLevel: try value(.paperMigrationLevel, 0),
             paperPublishEnabled: try value(.paperPublishEnabled, d.paperPublishEnabled),
-            paperLogPath: try value(.paperLogPath, d.paperLogPath)
+            paperLogPath: try value(.paperLogPath, d.paperLogPath),
+            paperMeetingsEnabled: try value(.paperMeetingsEnabled, d.paperMeetingsEnabled),
+            paperMeetingsCalendar: try value(.paperMeetingsCalendar, d.paperMeetingsCalendar)
         )
     }
 }

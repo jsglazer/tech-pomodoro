@@ -37,6 +37,7 @@
 		6B4AD63AA7E23EEE5A852B62 /* MirrorReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55939192A0BDED7D6877CD3C /* MirrorReceiver.swift */; };
 		7793B0434FB2EC4E99D690A4 /* PopoverTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = B80AF5DC08389A1647D06789 /* PopoverTabs.swift */; };
 		8BB876AEF6050844BC45F3FB /* TechPomodoroCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0D738F6A998B45604C709FC1 /* TechPomodoroCore */; };
+		8C8384512F79209372C0CCAE /* ClassCalendarReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCFE9AB901B5B98CEC6F889E /* ClassCalendarReader.swift */; };
 		8D3CF0C09B0C7760A90FA46A /* TechPomodoroLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 85E70AA1DB999C815063B6C8 /* TechPomodoroLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		92BE971C6A2AA72DCD082FEE /* SoundServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0A7444134F52FD87A2E276C /* SoundServices.swift */; };
 		997B50743A3F55274AAA5278 /* FocusSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A70825FA9B77148F13386E /* FocusSettings.swift */; };
@@ -133,6 +134,7 @@
 		B2F88ADDB1A1A0FE3257C713 /* TechPomodoroApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TechPomodoroApp.swift; sourceTree = "<group>"; };
 		B80AF5DC08389A1647D06789 /* PopoverTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverTabs.swift; sourceTree = "<group>"; };
 		BA5AFD8944FB09CECFA37CC2 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		BCFE9AB901B5B98CEC6F889E /* ClassCalendarReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassCalendarReader.swift; sourceTree = "<group>"; };
 		C32467675C3F6A1F0565A4BD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		CE7850DC3A0A37254A638DF6 /* HoverPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverPanel.swift; sourceTree = "<group>"; };
 		CFFF6A912D8662F247614ABC /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -244,6 +246,7 @@
 				5F1023918467E96E9E5C9D2B /* ActivityWatchSource.swift */,
 				587A68DDC4E3D1EC6BE96A17 /* APNsClient.swift */,
 				97C7F119A88710E7396C2079 /* AppController.swift */,
+				BCFE9AB901B5B98CEC6F889E /* ClassCalendarReader.swift */,
 				1266593F1C67BDDB7939A409 /* DocumentSensorService.swift */,
 				CE7850DC3A0A37254A638DF6 /* HoverPanel.swift */,
 				4C049227522F4D68AAC66230 /* LoginItem.swift */,
@@ -479,6 +482,7 @@
 				1574F21B2449C264DD23AFCC /* ActivityWatchSource.swift in Sources */,
 				AC85DE91C2437E9152DAE742 /* AlertsSettings.swift in Sources */,
 				E50F9128777A94BE48643F8B /* AppController.swift in Sources */,
+				8C8384512F79209372C0CCAE /* ClassCalendarReader.swift in Sources */,
 				40CE97E1184F2890F0B827D7 /* DocumentSensorService.swift in Sources */,
 				997B50743A3F55274AAA5278 /* FocusSettings.swift in Sources */,
 				9B7E068A6A6CCA2454CCD9C9 /* HoverPanel.swift in Sources */,
@@ -679,7 +683,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.29;
+				MARKETING_VERSION = 1.0.30;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -702,6 +706,8 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "TechPomodoro reads the folder shown in ForkLift so Focus can tell when you are working in a class folder.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "TechPomodoro reads your class calendar so class meetings count toward each class's paper time.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "TechPomodoro reads your class calendar so class meetings count toward each class's paper time.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Josh Glazer";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -790,7 +796,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.29;
+				MARKETING_VERSION = 1.0.30;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -814,6 +820,8 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "TechPomodoro reads the folder shown in ForkLift so Focus can tell when you are working in a class folder.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "TechPomodoro reads your class calendar so class meetings count toward each class's paper time.";
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "TechPomodoro reads your class calendar so class meetings count toward each class's paper time.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Josh Glazer";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

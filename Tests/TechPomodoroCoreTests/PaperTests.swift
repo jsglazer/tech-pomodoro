@@ -455,7 +455,7 @@ struct PaperPublishingTests {
         let json = try JSONSerialization.jsonObject(with: PaperPublishing.vaultJSON(sittings(), generated: at(30), calendar: calendar)) as? [String: Any]
         #expect(Set(json?.keys ?? [:].keys) == ["version", "generated", "sittings"])
         let row = (json?["sittings"] as? [[String: Any]])?.first
-        #expect(Set(row?.keys ?? [:].keys) == ["id", "date", "class", "kind", "start", "end", "minutes", "note", "spans"])
+        #expect(Set(row?.keys ?? [:].keys) == ["id", "date", "class", "kind", "start", "end", "minutes", "note", "spans", "source"])
     }
 
     @Test("Paper records outlive the ordinary 30-day retention")

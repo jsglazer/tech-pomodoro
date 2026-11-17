@@ -20,7 +20,7 @@ struct PaperPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             // The kind, always one tap away: Read, Write, Practice, Watch.
             HStack(spacing: 6) {
-                ForEach(PaperKind.allCases) { option in
+                ForEach(PaperKind.pickable) { option in
                     let selected = option == kind
                     Button {
                         select(option)
@@ -339,7 +339,7 @@ private struct SittingSheet: View {
                         ForEach(choices, id: \.self) { Text($0).tag($0) }
                     }
                     Picker("Kind", selection: $value.kind) {
-                        ForEach(PaperKind.allCases) { Text($0.title).tag($0) }
+                        ForEach(PaperKind.pickable) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     TextField("Note (optional)", text: $value.note)

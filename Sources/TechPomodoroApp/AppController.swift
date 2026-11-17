@@ -63,6 +63,10 @@ final class AppController: ObservableObject {
 
     /// Writes paper sittings to ActivityWatch and the vault, when this Mac's switch is on.
     let paperPublisher = PaperPublisher()
+    /// Reads class meetings from the calendar, when publishing and "Count class meetings" are on.
+    let classCalendar = ClassCalendarReader()
+    /// The class meetings last read from the calendar; empty unless both switches are on.
+    @Published private(set) var classMeetings: [PaperSittingView] = []
 
     /// Set for the duration of `popupPresenter.present`, whose `NSAlert.runModal()` pumps a nested
     /// run loop that would otherwise let the `.common`-mode refresh timer re-enter `send` while this
@@ -150,6 +154,7 @@ final class AppController: ObservableObject {
 
         paperCorrections = correctionStore.load()
         reloadHistory()
+        classCalendar.onChange = { [weak self] in self?.publishPaper() }
     }
 
     var settings: PomodoroSettings { state.settings }
@@ -197,6 +202,8 @@ final class AppController: ObservableObject {
             displayNow = now
             cloudSync?.fetchNow()
             phoneTimer.refreshNow()
+            // A meeting in progress grows; the popover's Paper today line should show it.
+            if countsClassMeetings { refreshClassMeetings() }
         }
     }
 
@@ -334,8 +341,15 @@ final class AppController: ObservableObject {
         if old.focus.documents != newSettings.focus.documents || old.focus.serverURL != newSettings.focus.serverURL {
             documentSensor?.sampleNow()
         }
+        let meetingsWereOn = old.paperPublishEnabled && old.paperMeetingsEnabled
+        let meetingsAreOn = newSettings.paperPublishEnabled && newSettings.paperMeetingsEnabled
+        if meetingsAreOn, !meetingsWereOn { classCalendar.requestAccess() }
+        if meetingsWereOn, !meetingsAreOn { classCalendar.stop() }
         if old.paperPublishEnabled != newSettings.paperPublishEnabled || old.paperLogPath != newSettings.paperLogPath
-            || old.focus.serverURL != newSettings.focus.serverURL {
+            || old.focus.serverURL != newSettings.focus.serverURL
+            || old.paperMeetingsEnabled != newSettings.paperMeetingsEnabled
+            || old.paperMeetingsCalendar != newSettings.paperMeetingsCalendar
+            || (meetingsAreOn && old.paperClasses != newSettings.paperClasses) {
             publishPaper()
         }
     }
@@ -645,9 +659,16 @@ final class AppController: ObservableObject {
         PaperHistory.sittings(records: history, corrections: paperCorrections)
     }
 
-    /// The last 14 days of sittings, newest first.
+    /// Paper sittings and class meetings together, same-class overlap counted once as Class.
+    var paperAndMeetings: [PaperSittingView] {
+        ClassMeetings.combined(sittings: paperSittings, meetings: classMeetings)
+    }
+
+    /// The last 14 days of sittings and class meetings, newest first.
     var recentPaperSittings: [PaperSittingView] {
-        PaperHistory.recent(records: history, corrections: paperCorrections, now: dateProvider.now(), calendar: calendar)
+        let now = dateProvider.now()
+        guard let start = AnalyticsAggregator.startOfWindow(now: now, calendar: calendar, days: 14) else { return [] }
+        return paperAndMeetings.filter { $0.start >= start }.reversed()
     }
 
     /// Today's paper minutes by class, e.g. `Data 1h 05m · Econ 25m`; nil when none.
@@ -655,7 +676,7 @@ final class AppController: ObservableObject {
 
     /// Paper minutes by class over the calendar-day window; nil when none.
     func paperLine(days: Int) -> String? {
-        PaperHistory.lineText(PaperHistory.totals(records: history, corrections: paperCorrections, now: dateProvider.now(), calendar: calendar, days: days))
+        PaperHistory.lineText(PaperHistory.totals(sittings: paperAndMeetings, now: dateProvider.now(), calendar: calendar, days: days))
     }
 
     /// Opens the Settings window; set by the app delegate.
@@ -702,7 +723,23 @@ final class AppController: ObservableObject {
 
     /// Hands the sittings to the publisher (a no-op unless this Mac's switch is on).
     func publishPaper() {
-        paperPublisher.update(sittings: paperSittings, settings: state.settings, calendar: calendar)
+        refreshClassMeetings()
+        paperPublisher.update(sittings: paperAndMeetings, settings: state.settings, calendar: calendar)
+    }
+
+    /// Class meetings count only on the publishing Mac with "Count class meetings" on.
+    private var countsClassMeetings: Bool {
+        settings.paperPublishEnabled && settings.paperMeetingsEnabled
+    }
+
+    /// Re-reads the class meetings from the calendar (or clears them when the switches are off).
+    private func refreshClassMeetings() {
+        let meetings = countsClassMeetings
+            ? classCalendar.meetings(
+                calendarTitle: settings.paperMeetingsCalendar, classes: settings.paperClasses,
+                corrections: paperCorrections, now: dateProvider.now(), calendar: calendar)
+            : []
+        if meetings != classMeetings { classMeetings = meetings }
     }
 
     /// The end-of-Work line for a tagged record that reached its end.
