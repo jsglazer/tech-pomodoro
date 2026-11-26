@@ -54,3 +54,33 @@ public final class MemorySettingsStore: SettingsStoring, @unchecked Sendable {
         lock.withLock { settings = newSettings }
     }
 }
+
+/// Settings edited continuously — a text field on every keystroke, a colour picker on every drag
+/// tick — are shown at once but committed (saved, synced, acted on) only once editing ends. This
+/// remembers the settings as they were before the first uncommitted edit, so the one commit compares
+/// against the right baseline.
+public struct SettingsDraft: Sendable, Equatable {
+    public private(set) var baseline: PomodoroSettings?
+
+    public init() {}
+
+    public var isPending: Bool { baseline != nil }
+
+    /// An edit is about to replace `current`; the first one since the last commit sets the baseline.
+    public mutating func edit(replacing current: PomodoroSettings) {
+        if baseline == nil { baseline = current }
+    }
+
+    /// Ends the draft. The baseline and `current` when they differ, so the caller commits the change
+    /// once; nil when nothing was drafted, or the edits came back to where they started.
+    public mutating func commit(current: PomodoroSettings) -> (old: PomodoroSettings, new: PomodoroSettings)? {
+        guard let old = baseline else { return nil }
+        baseline = nil
+        return old == current ? nil : (old, current)
+    }
+
+    /// Drops the draft without committing it (the settings were replaced from elsewhere).
+    public mutating func discard() {
+        baseline = nil
+    }
+}

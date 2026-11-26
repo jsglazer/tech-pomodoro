@@ -439,7 +439,7 @@ struct PaperClassesEditor: View {
         var settings = controller.settings
         guard settings.paperClasses.indices.contains(index) else { return }
         settings.paperClasses[index] = name
-        controller.update(settings: settings)
+        controller.draft(settings: settings)
     }
 
     private func add() {
@@ -477,7 +477,7 @@ struct PaperPublishingSection: View {
             Toggle("Publish paper time", isOn: controller.bind(\.paperPublishEnabled))
                 .toggleStyle(.switch)
             HStack {
-                Text(controller.settings.paperLogPath)
+                Text(controller.settings.paperLogPath.isEmpty ? "No paper log file chosen" : controller.settings.paperLogPath)
                     .font(.system(size: 10, design: .monospaced))
                     .lineLimit(1)
                     .truncationMode(.head)
@@ -513,9 +513,13 @@ struct PaperPublishingSection: View {
 
     private func choose() {
         let panel = NSSavePanel()
-        let current = URL(fileURLWithPath: controller.settings.paperLogPath)
-        panel.directoryURL = current.deletingLastPathComponent()
-        panel.nameFieldStringValue = current.lastPathComponent
+        if controller.settings.paperLogPath.isEmpty {
+            panel.nameFieldStringValue = "Paper Log.json"
+        } else {
+            let current = URL(fileURLWithPath: (controller.settings.paperLogPath as NSString).expandingTildeInPath)
+            panel.directoryURL = current.deletingLastPathComponent()
+            panel.nameFieldStringValue = current.lastPathComponent
+        }
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = false
         panel.message = "The app owns this file and rewrites it whole."

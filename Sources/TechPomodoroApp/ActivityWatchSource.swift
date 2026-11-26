@@ -8,11 +8,13 @@ final class ActivityWatchSource {
 
     enum SourceError: LocalizedError {
         case badURL
+        case notLoopback
         case noWindowBucket
 
         var errorDescription: String? {
             switch self {
             case .badURL: return "Invalid server URL"
+            case .notLoopback: return "The server URL must be on this Mac (localhost or 127.0.0.1)"
             case .noWindowBucket: return "No aw-watcher-window bucket"
             }
         }
@@ -37,33 +39,63 @@ final class ActivityWatchSource {
         return URLSession(configuration: config)
     }()
 
+    /// What the polls of one Work interval have read so far.
+    private struct Cache {
+        let server: String
+        let intervalStart: Date
+        /// The `end` of the previous request.
+        var until: Date
+        var activity: FocusActivity
+    }
+
+    private var cache: Cache?
+
+    /// Everything from `start` (and the note/document lookback before it) to `end`. The first poll of
+    /// an interval reads it all; later polls read only from just before the previous poll's end and
+    /// fold the result in (`IncrementalSpans`).
     func fetch(server: String, from start: Date, to end: Date) async throws -> FocusActivity {
         do {
             let buckets = try await resolveBuckets(server: server)
+            let previous = (cache?.server == server && cache?.intervalStart == start) ? cache : nil
             // A little past `end`, so the event still being extended is included.
             let until = end.addingTimeInterval(60)
-            let windows = try ActivityWatchParser.windows(try await events(server, buckets.window, start, until))
-            var notes: [NoteSpan] = []
+            let windowFrom = IncrementalSpans.fetchStart(earliest: start, lastFetchedUntil: previous?.until)
+            let lookbackFrom = IncrementalSpans.fetchStart(earliest: start.addingTimeInterval(-Self.noteLookback), lastFetchedUntil: previous?.until)
+            var activity = previous?.activity ?? FocusActivity()
+
+            activity.windows = IncrementalSpans.merge(
+                cached: activity.windows,
+                fresh: try ActivityWatchParser.windows(try await events(server, buckets.window, windowFrom, until)),
+                from: windowFrom
+            )
             if let bucket = buckets.notes {
-                notes = try ActivityWatchParser.notes(
-                    try await events(server, bucket, start.addingTimeInterval(-Self.noteLookback), until)
+                activity.notes = IncrementalSpans.merge(
+                    cached: activity.notes,
+                    fresh: try ActivityWatchParser.notes(try await events(server, bucket, lookbackFrom, until)),
+                    from: lookbackFrom
                 )
             }
-            var away: [AwaySpan] = []
             if let bucket = buckets.afk {
-                away = try ActivityWatchParser.away(try await events(server, bucket, start, until))
+                activity.away = IncrementalSpans.merge(
+                    cached: activity.away,
+                    fresh: try ActivityWatchParser.away(try await events(server, bucket, windowFrom, until)),
+                    from: windowFrom
+                )
             }
-            var documents: [DocumentSpan] = []
             if let bucket = buckets.documents {
                 // Merged events can start well before the interval, like notes.
-                documents = try ActivityWatchParser.documents(
-                    try await events(server, bucket, start.addingTimeInterval(-Self.noteLookback), until)
+                activity.documents = IncrementalSpans.merge(
+                    cached: activity.documents,
+                    fresh: try ActivityWatchParser.documents(try await events(server, bucket, lookbackFrom, until)),
+                    from: lookbackFrom
                 )
             }
-            return FocusActivity(windows: windows, notes: notes, away: away, documents: documents)
+            cache = Cache(server: server, intervalStart: start, until: until, activity: activity)
+            return activity
         } catch {
-            // A deleted or recreated bucket must be found again on the next poll.
+            // A deleted or recreated bucket must be found again on the next poll, and read in full.
             buckets = nil
+            cache = nil
             throw error
         }
     }
@@ -98,6 +130,8 @@ final class ActivityWatchSource {
 
     private func get(_ server: String, _ path: String, _ query: [URLQueryItem]) async throws -> Data {
         let base = server.hasSuffix("/") ? String(server.dropLast()) : server
+        // Only an aw-server on this Mac is ever read, as only one is ever written to.
+        guard LoopbackURL.isLoopback(base) else { throw SourceError.notLoopback }
         guard var components = URLComponents(string: "\(base)/api/0/\(path)") else { throw SourceError.badURL }
         if !query.isEmpty { components.queryItems = query }
         guard let url = components.url else { throw SourceError.badURL }

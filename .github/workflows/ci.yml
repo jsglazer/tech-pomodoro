@@ -15,13 +15,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install SwiftLint
-        run: brew install swiftlint
-
-      - name: Lint
-        run: swiftlint lint --strict
-        continue-on-error: true
-
       - name: Build
         run: swift build
 

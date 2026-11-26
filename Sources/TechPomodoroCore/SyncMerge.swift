@@ -67,6 +67,27 @@ public enum SyncMerge {
     public static func syncedFieldsDiffer(_ a: PomodoroSettings, _ b: PomodoroSettings) -> Bool {
         adopt(remote: a, keepingDeviceFieldsOf: b) != b
     }
+
+    /// Whether sync, starting up, should offer this device's settings record to the server.
+    ///
+    /// - No saved engine state: a first sync from this device (or a fresh account), so always.
+    /// - No settings system fields: the record has never reached the server, so always.
+    /// - Otherwise only when the settings were edited after the copy last known to be on the server
+    ///   (`uploadedModifiedAt`): an edit made while sync was off, or while CloudKit was still coming
+    ///   up, would otherwise never leave this device. A device with no record of what was uploaded
+    ///   (a build before this stamp existed) offers its settings once if it has ever edited them;
+    ///   the server's copy still wins if it is newer.
+    public static func shouldOfferSettingsOnStart(
+        hasSavedState: Bool,
+        hasSystemFields: Bool,
+        localModifiedAt: Date?,
+        uploadedModifiedAt: Date?
+    ) -> Bool {
+        guard hasSavedState, hasSystemFields else { return true }
+        guard let localModifiedAt else { return false }
+        guard let uploadedModifiedAt else { return true }
+        return localModifiedAt > uploadedModifiedAt
+    }
 }
 
 /// Settings as they travel between devices: the value plus the instant the user last changed it.

@@ -98,7 +98,15 @@ public final class MirrorCloudStore: Sendable {
         try await save(name: "mac-\(timer.deviceID)", payload: MirrorCodec.encode(timer))
     }
 
-    public func save(channel: MirrorChannel) async throws {
+    /// Stores this Mac's view of the shared channel, merged with any copy another Mac saved since it
+    /// was read (`MirrorChannel.resolve`), and returns what was stored.
+    @discardableResult
+    public func save(channel: MirrorChannel) async throws -> MirrorChannel {
+        try await saveMerging(channel, name: Self.channelName(channel.environment))
+    }
+
+    /// Overwrites the shared channel record with a replacement channel (Apple dropped the old one).
+    public func replace(channel: MirrorChannel) async throws {
         try await save(name: Self.channelName(channel.environment), payload: MirrorCodec.encode(channel))
     }
 
@@ -107,8 +115,15 @@ public final class MirrorCloudStore: Sendable {
         try await save(name: "iphone-\(phoneTimer.deviceID)", payload: MirrorCodec.encode(phoneTimer))
     }
 
-    /// The channel an iPhone's own Live Activity listens on.
-    public func save(ownChannel: MirrorChannel, phoneID: String) async throws {
+    /// The channel an iPhone's own Live Activity listens on, merged like `save(channel:)`.
+    @discardableResult
+    public func save(ownChannel: MirrorChannel, phoneID: String) async throws -> MirrorChannel {
+        try await saveMerging(ownChannel, name: Self.ownChannelPrefix + phoneID)
+    }
+
+    /// Overwrites an iPhone's own channel with a replacement (Apple dropped it, or it was made for the
+    /// other APNs environment).
+    public func replace(ownChannel: MirrorChannel, phoneID: String) async throws {
         try await save(name: Self.ownChannelPrefix + phoneID, payload: MirrorCodec.encode(ownChannel))
     }
 
@@ -149,8 +164,39 @@ public final class MirrorCloudStore: Sendable {
         CKRecord.ID(recordName: name, zoneID: zoneID)
     }
 
-    /// Last writer wins: each record has one writer, except the channel, where the newest view of what
-    /// was pushed is the right one to keep.
+    /// Conditional save of a channel record: read the server's copy (and its change tag), merge, and
+    /// save only if nobody wrote in between; on a conflict, merge with the copy CloudKit hands back
+    /// and try again. Two Macs pushing at once can therefore never regress `lastTimestamp`.
+    private func saveMerging(_ channel: MirrorChannel, name: String) async throws -> MirrorChannel {
+        let id = recordID(name)
+        var base: CKRecord
+        do {
+            base = try await database.record(for: id)
+        } catch let error as CKError where error.code == .unknownItem || error.code == .zoneNotFound {
+            base = CKRecord(recordType: Self.recordType, recordID: id)
+        }
+        for _ in 0..<Self.conflictRetries {
+            var stored = channel
+            if let data = base[Field.payload] as? Data, let server = try? MirrorCodec.decode(MirrorChannel.self, from: data) {
+                stored = MirrorChannel.resolve(mine: channel, server: server)
+            }
+            base[Field.payload] = try MirrorCodec.encode(stored) as NSData
+            base[Field.modifiedAt] = Date() as NSDate
+            do {
+                try await modify(base, policy: .ifServerRecordUnchanged)
+                return stored
+            } catch let error as CKError where error.code == .serverRecordChanged {
+                guard let server = error.serverRecord else { throw error }
+                base = server
+            }
+        }
+        throw CKError(.serverRecordChanged)
+    }
+
+    private static let conflictRetries = 4
+
+    /// Last writer wins. Each of these records has one writer (its own device), and a replacement
+    /// channel is meant to overwrite whatever was there.
     private func save(name: String, payload: Data) async throws {
         let record = CKRecord(recordType: Self.recordType, recordID: recordID(name))
         record[Field.payload] = payload as NSData

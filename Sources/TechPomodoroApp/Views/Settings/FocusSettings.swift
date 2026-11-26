@@ -115,7 +115,7 @@ struct FocusTabView: View {
             HStack {
                 Text("Server").foregroundStyle(Color.tpDimmed)
                 Spacer()
-                TextField("", text: controller.bind(\.focus.serverURL))
+                TextField("", text: controller.bindText(\.focus.serverURL))
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 170)
                     .font(.system(size: 11, design: .monospaced))

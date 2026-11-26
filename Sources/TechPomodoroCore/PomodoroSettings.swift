@@ -77,7 +77,7 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
     /// Mac: publish paper sittings to ActivityWatch and the vault file. Per device, never synced:
     /// only one Mac may publish, because aw-sync copies buckets between Macs.
     public var paperPublishEnabled: Bool
-    /// Mac: the app-owned vault file the paper sittings are written to. Per device.
+    /// Mac: the app-owned vault file the paper sittings are written to; empty until chosen. Per device.
     public var paperLogPath: String
     /// Mac: count class meetings from the calendar below toward each class's total, when publishing.
     /// Per device, never synced.
@@ -87,7 +87,9 @@ public struct PomodoroSettings: Codable, Sendable, Equatable {
 
     public static let defaultPaperMeetingsCalendar = "Josh-School"
 
-    public static let defaultPaperLogPath = "/Users/josh/VaultSchar/Classes/2026-B/Paper Log.json"
+    /// None until the user picks one: the core holds no machine paths. Publishing still writes the
+    /// ActivityWatch bucket; the vault file waits for a path.
+    public static let defaultPaperLogPath = ""
 
     public init(
         workMinutes: Int = 25,

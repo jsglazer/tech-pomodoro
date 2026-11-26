@@ -14,7 +14,7 @@ public enum PaperPublishing {
 
     /// One ActivityWatch event per span of every sitting.
     public struct AWEvent: Codable, Equatable, Sendable {
-        public struct Payload: Codable, Equatable, Sendable {
+        public struct Payload: Codable, Equatable, Hashable, Sendable {
             public var `class`: String
             public var kind: String
             public var note: String
@@ -50,9 +50,100 @@ public enum PaperPublishing {
     }
 
     public static func awEventsJSON(_ sittings: [PaperSittingView]) throws -> Data {
+        try encodeEvents(awEvents(sittings))
+    }
+
+    public static func encodeEvents(_ events: [AWEvent]) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(awEvents(sittings))
+        return try encoder.encode(events)
+    }
+
+    // MARK: - Bucket diff
+
+    /// An event as aw-server holds it, with the id it can be deleted by. `event` is nil for one that
+    /// is not a paper sitting at all: the bucket is the app's own, so such an event is deleted.
+    public struct StoredAWEvent: Equatable, Sendable {
+        public var id: Int
+        public var event: AWEvent?
+
+        public init(id: Int, event: AWEvent?) {
+            self.id = id
+            self.event = event
+        }
+    }
+
+    /// `GET buckets/<id>/events`. An event without an id cannot be touched and is skipped; one whose
+    /// payload is not a paper sitting is kept with a nil `event`, to be deleted.
+    public static func storedEvents(_ data: Data) throws -> [StoredAWEvent] {
+        struct Raw: Decodable {
+            let id: Int?
+            let event: AWEvent?
+
+            enum CodingKeys: String, CodingKey { case id, timestamp, duration, data }
+
+            init(from decoder: any Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                id = try? c.decode(Int.self, forKey: .id)
+                if let timestamp = try? c.decode(String.self, forKey: .timestamp),
+                   let duration = try? c.decode(Double.self, forKey: .duration),
+                   let payload = try? c.decode(AWEvent.Payload.self, forKey: .data) {
+                    event = AWEvent(timestamp: timestamp, duration: duration, data: payload)
+                } else {
+                    event = nil
+                }
+            }
+        }
+        return try JSONDecoder().decode([Raw].self, from: data).compactMap { raw in
+            raw.id.map { StoredAWEvent(id: $0, event: raw.event) }
+        }
+    }
+
+    /// What to post and what to delete so the bucket holds exactly `desired`, touching nothing that
+    /// is already right. Replaces delete-the-bucket-and-rebuild, which left aw-server with an empty
+    /// paper bucket if publishing failed half way. Events match on start instant (aw-server rewrites
+    /// the timestamp's format, and keeps microseconds), duration to the millisecond, and payload;
+    /// duplicates match one for one.
+    public static func bucketDiff(stored: [StoredAWEvent], desired: [AWEvent]) -> (add: [AWEvent], deleteIDs: [Int]) {
+        var unmatched: [EventKey: [Int]] = [:]
+        var foreign: [Int] = []
+        for item in stored {
+            if let event = item.event {
+                unmatched[EventKey(event), default: []].append(item.id)
+            } else {
+                foreign.append(item.id)
+            }
+        }
+        var add: [AWEvent] = []
+        for event in desired {
+            let key = EventKey(event)
+            if var ids = unmatched[key], !ids.isEmpty {
+                ids.removeFirst()
+                unmatched[key] = ids
+            } else {
+                add.append(event)
+            }
+        }
+        return (add, (unmatched.values.flatMap { $0 } + foreign).sorted())
+    }
+
+    private struct EventKey: Hashable {
+        let startMillis: Int64?
+        let timestamp: String?
+        let durationMillis: Int64
+        let data: AWEvent.Payload
+
+        init(_ event: AWEvent) {
+            if let date = ActivityWatchParser.date(event.timestamp) {
+                startMillis = Int64((date.timeIntervalSince1970 * 1000).rounded())
+                timestamp = nil
+            } else {
+                startMillis = nil
+                timestamp = event.timestamp
+            }
+            durationMillis = Int64((event.duration * 1000).rounded())
+            data = event.data
+        }
     }
 
     // MARK: - Vault file

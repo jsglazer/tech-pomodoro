@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import TechPomodoroAPNs
 import TechPomodoroCore
 import TechPomodoroSync
 
@@ -45,6 +46,9 @@ final class PhoneTimerWatcher {
     private var pushWork: Task<Void, Never>?
     private var channelFailures: [String: Date] = [:]
     private var creatingChannels: Set<String> = []
+    /// Own channels this Mac stored, and when: a poll that was already out when one was stored must
+    /// not forget it (`OwnChannelMerge`).
+    private var ownChannelWrites: [String: (channel: MirrorChannel, at: Date)] = [:]
 
     init(apns: APNsClient, credentials: @escaping () -> APNsCredentials?) {
         self.apns = apns
@@ -68,6 +72,7 @@ final class PhoneTimerWatcher {
             refreshNow()
         } else {
             snapshot = MirrorSnapshot()
+            ownChannelWrites = [:]
             tracked = nil
             display = nil
         }
@@ -77,11 +82,15 @@ final class PhoneTimerWatcher {
     func refreshNow() {
         guard enabled, !fetchInFlight else { return }
         fetchInFlight = true
+        let readStartedAt = Date()
         Task {
             defer { fetchInFlight = false }
             do {
-                let fresh = try await store.fetchAll()
+                var fresh = try await store.fetchAll()
                 guard enabled else { return }
+                fresh.ownChannels = OwnChannelMerge.merge(fresh: fresh.ownChannels, localWrites: ownChannelWrites, readStartedAt: readStartedAt)
+                // Writes older than this read are in it now.
+                ownChannelWrites = ownChannelWrites.filter { $0.value.at >= readStartedAt }
                 snapshot = fresh
                 ensureOwnChannels()
             } catch {
@@ -172,8 +181,8 @@ final class PhoneTimerWatcher {
             // Apple no longer knows it. Make a new one; the iPhone moves its activity onto it when next opened.
             let id = try await apns.createChannel(environment: channel.environment, credentials: credentials)
             let replacement = MirrorChannel(environment: channel.environment, channelID: id)
-            try await store.save(ownChannel: replacement, phoneID: phoneID)
-            snapshot.ownChannels[phoneID] = replacement
+            try await store.replace(ownChannel: replacement, phoneID: phoneID)
+            noteOwnChannel(replacement, phoneID: phoneID)
             return
         }
 
@@ -181,8 +190,12 @@ final class PhoneTimerWatcher {
         after.lastBoundary = boundary
         after.lastContent = desired
         after.lastTimestamp = timestamp
-        try await store.save(ownChannel: after, phoneID: phoneID)
-        snapshot.ownChannels[phoneID] = after
+        noteOwnChannel(try await store.save(ownChannel: after, phoneID: phoneID), phoneID: phoneID)
+    }
+
+    private func noteOwnChannel(_ channel: MirrorChannel, phoneID: String) {
+        snapshot.ownChannels[phoneID] = channel
+        ownChannelWrites[phoneID] = (channel, Date())
     }
 
     /// Every iPhone with mirroring on gets a channel for its own activity, made once and kept. Only a
@@ -202,19 +215,32 @@ final class PhoneTimerWatcher {
                     let id = try await apns.createChannel(environment: phone.environment, credentials: credentials)
                     let fresh = MirrorChannel(environment: phone.environment, channelID: id)
                     let kept: MirrorChannel
-                    if existing == nil {
-                        kept = try await store.claim(ownChannel: fresh, phoneID: phone.deviceID)
-                    } else {
-                        // Made for the other APNs environment (the iPhone build changed): replace it.
-                        try await store.save(ownChannel: fresh, phoneID: phone.deviceID)
+                    if let existing {
+                        // Made for the other APNs environment (the iPhone build changed): replace it,
+                        // and delete the old one, which no install of that iPhone can hear any more.
+                        try await store.replace(ownChannel: fresh, phoneID: phone.deviceID)
                         kept = fresh
+                        await deleteQuietly(existing, credentials: credentials)
+                    } else {
+                        kept = try await store.claim(ownChannel: fresh, phoneID: phone.deviceID)
+                        // Another Mac claimed first: ours is surplus.
+                        if kept.channelID != id { await deleteQuietly(fresh, credentials: credentials) }
                     }
-                    snapshot.ownChannels[phone.deviceID] = kept
+                    noteOwnChannel(kept, phoneID: phone.deviceID)
                 } catch {
                     channelFailures[phone.deviceID] = Date()
                     NSLog("tech-pomodoro: could not make a channel for \(phone.name): \(error.localizedDescription)")
                 }
             }
+        }
+    }
+
+    /// Best effort: a channel left behind costs a slot in Apple's per-app limit, not correctness.
+    private func deleteQuietly(_ channel: MirrorChannel, credentials: APNsCredentials) async {
+        do {
+            try await apns.deleteChannel(channelID: channel.channelID, environment: channel.environment, credentials: credentials)
+        } catch {
+            NSLog("tech-pomodoro: could not delete an unused APNs channel: \(error.localizedDescription)")
         }
     }
 }

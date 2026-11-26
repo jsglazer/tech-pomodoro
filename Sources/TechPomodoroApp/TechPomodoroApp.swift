@@ -108,6 +108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     /// Gives the iPhone mirror a moment to say this Mac's timer has stopped.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let controller else { return .terminateNow }
+        // An edit still being typed is saved (and queued for sync) before quitting.
+        controller.commitSettingsDraft()
         Task { @MainActor in
             await controller.shutdownMirror()
             sender.reply(toApplicationShouldTerminate: true)

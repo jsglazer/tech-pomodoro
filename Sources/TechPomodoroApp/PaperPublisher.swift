@@ -17,6 +17,8 @@ final class PaperPublisher: ObservableObject {
 
     @Published private(set) var status = Status()
 
+    private static let noPathError = "Vault file: choose a paper log file"
+
     /// Minimum seconds between two publishes.
     static let debounce: TimeInterval = 60
 
@@ -71,7 +73,9 @@ final class PaperPublisher: ObservableObject {
         var errors: [String] = []
         var wrote = false
 
-        if !(vaultPublished?.path == request.path && vaultPublished?.fingerprint == fingerprint) {
+        if request.path.trimmingCharacters(in: .whitespaces).isEmpty {
+            errors.append(Self.noPathError)
+        } else if !(vaultPublished?.path == request.path && vaultPublished?.fingerprint == fingerprint) {
             do {
                 try writeVaultFile(request)
                 vaultPublished = (request.path, fingerprint)
@@ -98,8 +102,9 @@ final class PaperPublisher: ObservableObject {
             status.sittingsWritten = request.sittings.count
         }
         status.lastError = errors.isEmpty ? nil : errors.joined(separator: " · ")
-        // Anything that failed is tried again on the debounce (or the ActivityWatch backoff).
-        if !errors.isEmpty { schedule() }
+        // Anything that failed is tried again on the debounce (or the ActivityWatch backoff). A
+        // missing path is not retried: choosing one republishes.
+        if errors.contains(where: { $0 != Self.noPathError }) { schedule() }
     }
 
     /// The whole file, written to a temporary file beside it and renamed over it. The folder must
@@ -114,20 +119,29 @@ final class PaperPublisher: ObservableObject {
         try data.write(to: url, options: .atomic)
     }
 
-    /// Deletes and recreates the bucket, then posts every span as an event.
+    /// Brings the bucket to exactly the sittings' events: creates it if missing, posts the events it
+    /// lacks, then deletes the ones no longer wanted. Unchanged events are never touched, so a failure
+    /// part way leaves the bucket at worst briefly with an extra or a missing edit, never empty, and
+    /// the retry finishes the job.
     private func writeBucket(_ request: Request) async throws {
         let host = try await ActivityWatchHTTP.hostname(server: request.server)
         let bucket = PaperPublishing.bucketID(hostname: host)
         let path = bucket.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? bucket
-        // 404: there was no bucket yet.
-        _ = try await ActivityWatchHTTP.request(request.server, "buckets/\(path)?force=1", method: "DELETE", accept: [404])
         let create = try JSONSerialization.data(withJSONObject: [
             "client": DocumentHeartbeat.client, "type": PaperPublishing.eventType, "hostname": host
         ])
+        // 304: it already exists.
         _ = try await ActivityWatchHTTP.request(request.server, "buckets/\(path)", method: "POST", body: create, accept: [304])
-        let events = try PaperPublishing.awEventsJSON(request.sittings)
-        if !request.sittings.isEmpty {
-            _ = try await ActivityWatchHTTP.request(request.server, "buckets/\(path)/events", method: "POST", body: events)
+        let stored = try PaperPublishing.storedEvents(
+            try await ActivityWatchHTTP.request(request.server, "buckets/\(path)/events?limit=-1", method: "GET")
+        )
+        let diff = PaperPublishing.bucketDiff(stored: stored, desired: PaperPublishing.awEvents(request.sittings))
+        if !diff.add.isEmpty {
+            _ = try await ActivityWatchHTTP.request(request.server, "buckets/\(path)/events", method: "POST", body: try PaperPublishing.encodeEvents(diff.add))
+        }
+        for id in diff.deleteIDs {
+            // 404: already gone.
+            _ = try await ActivityWatchHTTP.request(request.server, "buckets/\(path)/events/\(id)", method: "DELETE", accept: [404])
         }
     }
 }

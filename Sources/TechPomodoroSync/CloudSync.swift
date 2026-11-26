@@ -69,10 +69,19 @@ public final class CloudSync: ObservableObject {
 
     private var host: CloudSyncEngineHost?
     private var pollTimer: Timer?
+    /// Builds each engine host; tests swap in one with a fake connection.
+    var makeHost: (CloudSync) -> CloudSyncEngineHost = { owner in
+        CloudSyncEngineHost(owner: owner, containerIdentifier: CloudSync.containerIdentifier)
+    }
+    /// Tests run without the iCloud entitlement.
+    var requiresEntitlement = true
 
     private enum Key {
         static let settingsModifiedAt = "sync.settingsModifiedAt"
         static let settingsSystemFields = "sync.settingsSystemFields"
+        /// `modifiedAt` of the settings copy last known to be on the server, so a start can tell an
+        /// edit that never went out (sync off, or CloudKit still coming up) from one that did.
+        static let settingsUploadedModifiedAt = "sync.settingsUploadedModifiedAt"
         /// Ids of history records known to be on the server, so a start uploads exactly the ones
         /// written while sync was off, or before it came up.
         static let uploadedIntervals = "sync.uploadedIntervals"
@@ -121,30 +130,46 @@ public final class CloudSync: ObservableObject {
     }
 
     private func start() {
-        guard CloudSyncEntitlement.isPresent else {
+        guard !requiresEntitlement || CloudSyncEntitlement.isPresent else {
             status = .unavailable("Not available in this build (no iCloud entitlement)")
             return
         }
         status = .syncing
         let saved = loadState()
-        let host = CloudSyncEngineHost(owner: self, containerIdentifier: Self.containerIdentifier)
+        let host = makeHost(self)
         self.host = host
         let unsent = unsentIntervalIDs()
         let unsentCorrections = unsentCorrectionIDs()
-        // The settings record has never reached the server (first sync, or every earlier attempt
-        // failed — say, before the schema was deployed), so offer it again.
-        let settingsUnsent = defaults.data(forKey: Key.settingsSystemFields) == nil
-        Task {
+        let sendSettings = shouldOfferSettings(hasSavedState: saved != nil)
+        startTask = Task {
             let ready = await host.start(
                 stateSerialization: saved,
                 pendingIntervalIDs: unsent,
                 pendingCorrectionIDs: unsentCorrections,
                 createZone: saved == nil,
-                sendSettings: saved == nil || settingsUnsent
+                sendSettings: sendSettings
             )
-            if ready { self.startPolling() }
+            // Sync may have been toggled off and on while this host was coming up: only the current
+            // host polls.
+            if ready, self.host === host { self.startPolling() }
         }
     }
+
+    /// Whether a start offers the settings record: see `SyncMerge.shouldOfferSettingsOnStart`.
+    func shouldOfferSettings(hasSavedState: Bool) -> Bool {
+        SyncMerge.shouldOfferSettingsOnStart(
+            hasSavedState: hasSavedState,
+            hasSystemFields: defaults.data(forKey: Key.settingsSystemFields) != nil,
+            localModifiedAt: defaults.object(forKey: Key.settingsModifiedAt) as? Date,
+            uploadedModifiedAt: defaults.object(forKey: Key.settingsUploadedModifiedAt) as? Date
+        )
+    }
+
+    /// The current host's start-up, for tests to await.
+    private(set) var startTask: Task<Void, Never>?
+
+    /// True while the poll timer is scheduled.
+    var isPolling: Bool { pollTimer != nil }
 
     private func stop() {
         pollTimer?.invalidate()
@@ -194,9 +219,10 @@ public final class CloudSync: ObservableObject {
 
     // MARK: - Called by the engine host
 
-    func setStatus(_ newStatus: CloudSyncStatus) {
-        // Once stopped, a late callback from the old host must not overwrite `.off`.
-        guard host != nil else { return }
+    func setStatus(_ newStatus: CloudSyncStatus, from sender: CloudSyncEngineHost) {
+        // Once stopped, or replaced by a newer host, a late callback from the old one must not
+        // overwrite the current status.
+        guard host === sender else { return }
         status = newStatus
     }
 
@@ -318,6 +344,8 @@ public final class CloudSync: ObservableObject {
             let local = settingsStore.load()
             let adopted = SyncMerge.adopt(remote: remote.settings, keepingDeviceFieldsOf: local)
             defaults.set(remote.modifiedAt, forKey: Key.settingsModifiedAt)
+            // That copy is the server's, so nothing local is waiting to go out.
+            defaults.set(remote.modifiedAt, forKey: Key.settingsUploadedModifiedAt)
             if adopted != local {
                 settingsStore.save(adopted)
                 onChange(.settings(adopted))
@@ -326,11 +354,15 @@ public final class CloudSync: ObservableObject {
         }
     }
 
-    func storeSettingsSystemFields(_ data: Data?) {
+    /// The server's bookkeeping for the settings record, and the `modifiedAt` of the copy it now
+    /// holds. Nil forgets both: the record must be sent afresh.
+    func storeSettingsSystemFields(_ data: Data?, uploadedModifiedAt: Date? = nil) {
         if let data {
             defaults.set(data, forKey: Key.settingsSystemFields)
+            if let uploadedModifiedAt { defaults.set(uploadedModifiedAt, forKey: Key.settingsUploadedModifiedAt) }
         } else {
             defaults.removeObject(forKey: Key.settingsSystemFields)
+            defaults.removeObject(forKey: Key.settingsUploadedModifiedAt)
         }
     }
 
@@ -343,8 +375,9 @@ public final class CloudSync: ObservableObject {
         if let stateURL { try? FileManager.default.removeItem(at: stateURL) }
     }
 
-    func saveState(_ serialization: CKSyncEngine.State.Serialization) {
-        guard let stateURL else { return }
+    func saveState(_ serialization: CKSyncEngine.State.Serialization, from sender: CloudSyncEngineHost) {
+        // A host replaced by a quick off/on toggle must not overwrite the current host's state.
+        guard host === sender, let stateURL else { return }
         do {
             try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONEncoder().encode(serialization).write(to: stateURL, options: .atomic)

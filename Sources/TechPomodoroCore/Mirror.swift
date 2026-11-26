@@ -417,6 +417,40 @@ public struct MirrorChannel: Codable, Equatable, Sendable {
     public func nextTimestamp(at now: Date) -> Int {
         max(Int(now.timeIntervalSince1970), lastTimestamp + 1)
     }
+
+    /// What to store when this Mac's view of a channel (`mine`) meets the copy another Mac saved
+    /// since this one read it (`server`). Two Macs pushing at once must not regress
+    /// `lastTimestamp`, or the iPhone discards the next update as older than one it already has.
+    ///
+    /// - Same channel: the side that pushed last (higher `lastTimestamp`) describes what the phones
+    ///   now show, so it wins whole; ties go to `mine`. `lastTimestamp` is the larger of the two.
+    /// - Different channels: another Mac replaced the channel (Apple dropped it, or an environment
+    ///   switch). What `mine` says about the old channel no longer applies, so the server's stands.
+    public static func resolve(mine: MirrorChannel, server: MirrorChannel) -> MirrorChannel {
+        guard mine.channelID == server.channelID else { return server }
+        var winner = server.lastTimestamp > mine.lastTimestamp ? server : mine
+        winner.lastTimestamp = max(mine.lastTimestamp, server.lastTimestamp)
+        return winner
+    }
+}
+
+/// Folds a fresh CloudKit read of the iPhones' own channels into what this Mac already knows. A
+/// read that started before this Mac stored a channel cannot know about it, so taking it wholesale
+/// would forget the channel and make a second one on the next poll.
+public enum OwnChannelMerge {
+    /// - `fresh`: the channels as the read returned them.
+    /// - `localWrites`: channels this Mac stored, with when each was stored.
+    /// - `readStartedAt`: when the read was issued.
+    ///
+    /// A local write made at or after `readStartedAt` overrides the read; older writes are what the
+    /// read already reflects.
+    public static func merge(fresh: [String: MirrorChannel], localWrites: [String: (channel: MirrorChannel, at: Date)], readStartedAt: Date) -> [String: MirrorChannel] {
+        var merged = fresh
+        for (phoneID, write) in localWrites where write.at >= readStartedAt {
+            merged[phoneID] = write.channel
+        }
+        return merged
+    }
 }
 
 /// JSON for the CloudKit `payload` field. Default date encoding, so a date round-trips exactly and

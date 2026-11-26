@@ -748,3 +748,43 @@ extension MenuBarFormatter {
         return HoverInfo(title: "\(info.title) — \(anchor.taskName)", detail: info.detail)
     }
 }
+
+// MARK: - Incremental polling
+
+/// A span with a start and an end, as every ActivityWatch event becomes.
+public protocol TimedSpan {
+    var start: Date { get }
+    var end: Date { get }
+}
+
+extension WindowSpan: TimedSpan {}
+extension NoteSpan: TimedSpan {}
+extension AwaySpan: TimedSpan {}
+extension DocumentSpan: TimedSpan {}
+
+/// Focus polls every few seconds through a whole Work interval. Rather than re-reading every
+/// bucket from the interval start each time, each poll asks only for events from a little before
+/// the previous poll's end, and this folds them into what was already read.
+public enum IncrementalSpans {
+
+    /// How far back each poll re-reads past the previous one. aw-server extends the newest event in
+    /// place as heartbeats arrive (and a watcher's pulse can lag), so the tail is always re-read.
+    public static let overlap: TimeInterval = 5 * 60
+
+    /// Where a poll's request should start: the full lookback the first time, then the overlap
+    /// before the previous request's end, never earlier than the full lookback.
+    public static func fetchStart(earliest: Date, lastFetchedUntil: Date?) -> Date {
+        guard let lastFetchedUntil else { return earliest }
+        return max(earliest, lastFetchedUntil.addingTimeInterval(-overlap))
+    }
+
+    /// aw-server returns every event that overlaps the requested range, so `fresh` holds every
+    /// event ending after `from`. Cached spans ending at or before it are kept; a cached span sharing
+    /// a fresh span's start is the same event, since extended (or returned again), and gives way to it. Newest first, the order
+    /// aw-server itself returns, so the result matches a full re-read.
+    public static func merge<Span: TimedSpan>(cached: [Span], fresh: [Span], from: Date) -> [Span] {
+        let freshStarts = Set(fresh.map(\.start))
+        let kept = cached.filter { $0.end <= from && !freshStarts.contains($0.start) }
+        return (kept + fresh).sorted { $0.start > $1.start }
+    }
+}

@@ -11,7 +11,6 @@
 		093AA1729BF8C00A8A8D2285 /* ScheduleSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2142183D2677AFCFF513826F /* ScheduleSettings.swift */; };
 		09455510358F04850C4CB9CC /* PhoneTimerWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5ED70D99181C7976482360 /* PhoneTimerWatcher.swift */; };
 		0C0035DEB5F480876B5E1321 /* PaperScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888C89546D133406074661F1 /* PaperScreens.swift */; };
-		12D7C7C6107FAF45CF1D4D90 /* APNsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 587A68DDC4E3D1EC6BE96A17 /* APNsClient.swift */; };
 		1574F21B2449C264DD23AFCC /* ActivityWatchSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F1023918467E96E9E5C9D2B /* ActivityWatchSource.swift */; };
 		1BE3E42E76615E2DD526A938 /* TechPomodoroiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF56F3C1F3AC2928158D92FC /* TechPomodoroiOSApp.swift */; };
 		1E4BA4061D4BE7C0F6C63D02 /* PomodoroActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114743B784961E638E5972B8 /* PomodoroActivityAttributes.swift */; };
@@ -53,6 +52,7 @@
 		ADDFE8DD5A92A9500039CC21 /* PomodoroIntentHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9D397DFD4C276E4B4FF7D7 /* PomodoroIntentHandler.swift */; };
 		B1280D5A2174FB339EB14840 /* PomodoroIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7417BBA9CB4B582241FE0916 /* PomodoroIntents.swift */; };
 		B4E3A570E5F6F7F1C7E7F473 /* PaperAndAnalyticsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ED874C5C055B83058ABAB2A /* PaperAndAnalyticsSettings.swift */; };
+		BC85B7157458156E0D6D5AC2 /* TechPomodoroAPNs in Frameworks */ = {isa = PBXBuildFile; productRef = 136B2498A88186DB3768114A /* TechPomodoroAPNs */; };
 		C2341FB09D3F0D501793DC56 /* SettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB8A3F61740B3266A489D6D /* SettingsWindow.swift */; };
 		C5D56AA82948949CF312A866 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A642378DA86F1873C147F9BD /* Theme.swift */; };
 		C767A6CD7E55D1A72C79F2AE /* Pulse.caf in Resources */ = {isa = PBXBuildFile; fileRef = 63D05C6AA764305BD5A4C226 /* Pulse.caf */; };
@@ -60,6 +60,7 @@
 		D2AB84C7C03B9B1985841513 /* MenuBarAndDevicesSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B7CA109980B0FD37D277596 /* MenuBarAndDevicesSettings.swift */; };
 		DB23FC71C7B03B9D120E4E0C /* Chime.caf in Resources */ = {isa = PBXBuildFile; fileRef = 65DED8DBCE05FB045C5F5439 /* Chime.caf */; };
 		E04DCB183AE64FAE4173A9DC /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 1A14D75459AACE4E76D726B1 /* AppIcon.icns */; };
+		E18E2E2674D52AF568481424 /* FocusController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F9236A9B74F6FA6B0C986F /* FocusController.swift */; };
 		E50F9128777A94BE48643F8B /* AppController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C7F119A88710E7396C2079 /* AppController.swift */; };
 		F07364A2863CEEB2201FC005 /* PaperPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A51103DE4CD0FA07FAC7442D /* PaperPublisher.swift */; };
 		F0F8A8AAFECB9025C623FCBC /* PaperViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15B4E734D5428315E402C7AA /* PaperViews.swift */; };
@@ -107,7 +108,6 @@
 		4C377F04604CD5A0C12A108E /* NotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduler.swift; sourceTree = "<group>"; };
 		51BCB696054BAC914B74E9D6 /* PomodoroLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomodoroLiveActivity.swift; sourceTree = "<group>"; };
 		55939192A0BDED7D6877CD3C /* MirrorReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorReceiver.swift; sourceTree = "<group>"; };
-		587A68DDC4E3D1EC6BE96A17 /* APNsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APNsClient.swift; sourceTree = "<group>"; };
 		59CB213528DF3F898CB462CB /* Theme+Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Theme+Tokens.swift"; sourceTree = "<group>"; };
 		5F1023918467E96E9E5C9D2B /* ActivityWatchSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityWatchSource.swift; sourceTree = "<group>"; };
 		60D8FFA0F648285E3203E445 /* PopupAlertService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopupAlertService.swift; sourceTree = "<group>"; };
@@ -117,6 +117,7 @@
 		65DED8DBCE05FB045C5F5439 /* Chime.caf */ = {isa = PBXFileReference; path = Chime.caf; sourceTree = "<group>"; };
 		6ED874C5C055B83058ABAB2A /* PaperAndAnalyticsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperAndAnalyticsSettings.swift; sourceTree = "<group>"; };
 		72E95E7F7B0B68B10D580AEF /* Glass.caf */ = {isa = PBXFileReference; path = Glass.caf; sourceTree = "<group>"; };
+		73F9236A9B74F6FA6B0C986F /* FocusController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusController.swift; sourceTree = "<group>"; };
 		7417BBA9CB4B582241FE0916 /* PomodoroIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PomodoroIntents.swift; sourceTree = "<group>"; };
 		7B7CA109980B0FD37D277596 /* MenuBarAndDevicesSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarAndDevicesSettings.swift; sourceTree = "<group>"; };
 		81A70825FA9B77148F13386E /* FocusSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSettings.swift; sourceTree = "<group>"; };
@@ -156,6 +157,7 @@
 			files = (
 				3812ECEBD1F0EF3B1F1E8F1B /* TechPomodoroCore in Frameworks */,
 				A6E6261F11DF22D35EE160C3 /* TechPomodoroSync in Frameworks */,
+				BC85B7157458156E0D6D5AC2 /* TechPomodoroAPNs in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -244,10 +246,10 @@
 				7163CA06BC3FEC39EEE14464 /* Resources */,
 				E93F0299A9525663AFB5745A /* Views */,
 				5F1023918467E96E9E5C9D2B /* ActivityWatchSource.swift */,
-				587A68DDC4E3D1EC6BE96A17 /* APNsClient.swift */,
 				97C7F119A88710E7396C2079 /* AppController.swift */,
 				BCFE9AB901B5B98CEC6F889E /* ClassCalendarReader.swift */,
 				1266593F1C67BDDB7939A409 /* DocumentSensorService.swift */,
+				73F9236A9B74F6FA6B0C986F /* FocusController.swift */,
 				CE7850DC3A0A37254A638DF6 /* HoverPanel.swift */,
 				4C049227522F4D68AAC66230 /* LoginItem.swift */,
 				390CA56B331CD69D996D425C /* MirrorPusher.swift */,
@@ -396,6 +398,7 @@
 			packageProductDependencies = (
 				4A50958B477135E0CF03A5E0 /* TechPomodoroCore */,
 				C7396FF21AA9F9EC61254E4E /* TechPomodoroSync */,
+				136B2498A88186DB3768114A /* TechPomodoroAPNs */,
 			);
 			productName = TechPomodoro;
 			productReference = F3224FC4AE4B9A3751AA49F7 /* TechPomodoro.app */;
@@ -478,12 +481,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				12D7C7C6107FAF45CF1D4D90 /* APNsClient.swift in Sources */,
 				1574F21B2449C264DD23AFCC /* ActivityWatchSource.swift in Sources */,
 				AC85DE91C2437E9152DAE742 /* AlertsSettings.swift in Sources */,
 				E50F9128777A94BE48643F8B /* AppController.swift in Sources */,
 				8C8384512F79209372C0CCAE /* ClassCalendarReader.swift in Sources */,
 				40CE97E1184F2890F0B827D7 /* DocumentSensorService.swift in Sources */,
+				E18E2E2674D52AF568481424 /* FocusController.swift in Sources */,
 				997B50743A3F55274AAA5278 /* FocusSettings.swift in Sources */,
 				9B7E068A6A6CCA2454CCD9C9 /* HoverPanel.swift in Sources */,
 				5598E4FE12DEB1C895D654AB /* LoginItem.swift in Sources */,
@@ -683,7 +686,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.0.31;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -796,7 +799,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.0.31;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -887,6 +890,10 @@
 		0D738F6A998B45604C709FC1 /* TechPomodoroCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TechPomodoroCore;
+		};
+		136B2498A88186DB3768114A /* TechPomodoroAPNs */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TechPomodoroAPNs;
 		};
 		4A50958B477135E0CF03A5E0 /* TechPomodoroCore */ = {
 			isa = XCSwiftPackageProductDependency;

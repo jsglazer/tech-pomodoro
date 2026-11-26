@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import TechPomodoroAPNs
 import TechPomodoroCore
 import TechPomodoroSync
 import UniformTypeIdentifiers
@@ -72,7 +73,7 @@ final class MirrorPusher: ObservableObject {
             defaults.set(deviceID, forKey: "mirror.deviceID")
         }
         deviceName = Host.current().localizedName ?? "Mac"
-        credentials = APNsKeychain.load()
+        credentials = APNsKeychain.standard.load()
     }
 
     // MARK: - Driven by AppController
@@ -156,10 +157,18 @@ final class MirrorPusher: ObservableObject {
                 return
             }
 
+            // Each environment on its own: a failure pushing to a development build must not stop the
+            // production push in the same run. The first failure is reported once all have been tried.
             var pushed = false
+            var firstError: Error?
             for environment in environments.sorted(by: { $0.rawValue < $1.rawValue }) {
-                pushed = try await push(desired: desired, environment: environment, snapshot: snapshot, credentials: credentials, now: now) || pushed
+                do {
+                    pushed = try await push(desired: desired, environment: environment, snapshot: snapshot, credentials: credentials, now: now) || pushed
+                } catch {
+                    firstError = firstError ?? error
+                }
             }
+            if let firstError { throw firstError }
             finish(pushed ? .pushed(Date()) : (status.isPushed ? status : .ready))
             retryDelay = 15
         } catch {
@@ -247,10 +256,24 @@ final class MirrorPusher: ObservableObject {
         let id = try await apns.createChannel(environment: environment, credentials: credentials)
         let fresh = MirrorChannel(environment: environment, channelID: id)
         if replacing {
-            try await store.save(channel: fresh)
+            try await store.replace(channel: fresh)
             return fresh
         }
-        return try await store.claim(channel: fresh)
+        let kept = try await store.claim(channel: fresh)
+        if kept.channelID != id {
+            // Another Mac's channel won the claim: ours would only sit unused against Apple's limit.
+            await deleteQuietly(channelID: id, environment: environment, credentials: credentials)
+        }
+        return kept
+    }
+
+    /// Best effort: a channel left behind costs a slot in Apple's per-app limit, not correctness.
+    private func deleteQuietly(channelID: String, environment: APNsEnvironment, credentials: APNsCredentials) async {
+        do {
+            try await apns.deleteChannel(channelID: channelID, environment: environment, credentials: credentials)
+        } catch {
+            NSLog("tech-pomodoro: could not delete an unused APNs channel: \(Self.describe(error))")
+        }
     }
 
     private func payload(_ broadcast: MirrorPushPlanner.Broadcast, timestamp: Int) throws -> Data {
@@ -304,14 +327,14 @@ final class MirrorPusher: ObservableObject {
     }
 
     func removeKey() {
-        APNsKeychain.delete()
+        APNsKeychain.standard.delete()
         credentials = nil
         Task { await apns.resetToken() }
         if enabled { status = .needsKey }
     }
 
     private func store(_ updated: APNsCredentials) throws {
-        try APNsKeychain.save(updated)
+        try APNsKeychain.standard.save(updated)
         credentials = updated
         Task { await apns.resetToken() }
         if enabled {

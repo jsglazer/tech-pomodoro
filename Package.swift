@@ -15,6 +15,8 @@ let package = Package(
         .library(name: "TechPomodoroCore", targets: ["TechPomodoroCore"]),
         // CloudKit sync of settings and history, shared by the Mac and iOS apps.
         .library(name: "TechPomodoroSync", targets: ["TechPomodoroSync"]),
+        // APNs signing, Keychain storage and the HTTP client the Mac pushes Live Activities with.
+        .library(name: "TechPomodoroAPNs", targets: ["TechPomodoroAPNs"]),
         // The OS shell (AppKit status item + SwiftUI popover). Not part of the headless gate.
         .executable(name: "TechPomodoroApp", targets: ["TechPomodoroApp"])
     ],
@@ -36,10 +38,19 @@ let package = Package(
             ]
         ),
 
+        // MARK: - APNs (JWT signing, Keychain, HTTP) — a library so the tests can reach it
+        .target(
+            name: "TechPomodoroAPNs",
+            dependencies: ["TechPomodoroCore"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6)
+            ]
+        ),
+
         // MARK: - OS shell
         .executableTarget(
             name: "TechPomodoroApp",
-            dependencies: ["TechPomodoroCore", "TechPomodoroSync"],
+            dependencies: ["TechPomodoroCore", "TechPomodoroSync", "TechPomodoroAPNs"],
             resources: [
                 .process("Resources")
             ],
@@ -52,6 +63,20 @@ let package = Package(
         .testTarget(
             name: "TechPomodoroCoreTests",
             dependencies: ["TechPomodoroCore"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6)
+            ]
+        ),
+        .testTarget(
+            name: "TechPomodoroSyncTests",
+            dependencies: ["TechPomodoroCore", "TechPomodoroSync"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6)
+            ]
+        ),
+        .testTarget(
+            name: "TechPomodoroAPNsTests",
+            dependencies: ["TechPomodoroCore", "TechPomodoroAPNs"],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
             ]

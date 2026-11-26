@@ -30,19 +30,34 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
 
     private weak var owner: CloudSync?
     private let containerIdentifier: String
-    private var engine: CKSyncEngine?
+    private let connector: Connector
+    /// Nil until `start()` has the engine up.
+    private var driver: (any SyncEngineDriving)?
+    /// Changes queued before the engine exists. `start()` awaits the iCloud account first, and actor
+    /// reentrancy lets an enqueue run in that gap; without this it would be a silent no-op.
+    private(set) var buffered: [CKSyncEngine.PendingRecordZoneChange] = []
 
-    init(owner: CloudSync, containerIdentifier: String) {
+    /// How the host gets its engine: checks the account and builds a `CKSyncEngine` with the host as
+    /// its delegate. Injected so the start-up path can be tested without iCloud.
+    typealias Connector = @Sendable (CloudSyncEngineHost, CKSyncEngine.State.Serialization?) async -> Connection
+
+    enum Connection: Sendable {
+        case ready(any SyncEngineDriving)
+        case unavailable(CloudSyncStatus)
+    }
+
+    init(owner: CloudSync, containerIdentifier: String, connector: Connector? = nil) {
         self.owner = owner
         self.containerIdentifier = containerIdentifier
+        self.connector = connector ?? { host, state in await Self.connectToCloudKit(host: host, containerIdentifier: containerIdentifier, state: state) }
     }
 
     // MARK: - Lifecycle
 
     /// Checks the iCloud account, then brings the engine up and queues every local record not yet on
-    /// the server. With no saved state this is the first sync from this device (or a fresh account),
-    /// so the zone and the settings are queued too. Settings resolve by `modifiedAt`, never by who
-    /// happened to send first.
+    /// the server, plus anything enqueued while it was coming up. With no saved state this is the
+    /// first sync from this device (or a fresh account), so the zone is queued too. Settings resolve
+    /// by `modifiedAt`, never by who happened to send first.
     func start(
         stateSerialization: CKSyncEngine.State.Serialization?,
         pendingIntervalIDs: [UUID],
@@ -50,37 +65,46 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
         createZone: Bool,
         sendSettings: Bool
     ) async -> Bool {
+        let driver: any SyncEngineDriving
+        switch await connector(self, stateSerialization) {
+        case .unavailable(let status):
+            await owner?.setStatus(status, from: self)
+            return false
+        case .ready(let ready):
+            driver = ready
+        }
+        self.driver = driver
+
+        if createZone {
+            driver.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
+        }
+        var changes: [CKSyncEngine.PendingRecordZoneChange] = []
+        if sendSettings { changes.append(.saveRecord(Self.settingsRecordID)) }
+        changes += pendingIntervalIDs.map { .saveRecord(Self.recordID(for: $0)) }
+        changes += pendingCorrectionIDs.map { .saveRecord(Self.correctionRecordID(for: $0)) }
+        changes += buffered
+        buffered = []
+        if !changes.isEmpty { driver.add(pendingRecordZoneChanges: changes) }
+        await fetch()
+        return true
+    }
+
+    /// The real connection: the account check, then a `CKSyncEngine` delegating to `host`.
+    private static func connectToCloudKit(host: CloudSyncEngineHost, containerIdentifier: String, state: CKSyncEngine.State.Serialization?) async -> Connection {
         let container = CKContainer(identifier: containerIdentifier)
         do {
             let account = try await container.accountStatus()
-            guard account == .available else {
-                await owner?.setStatus(.unavailable(Self.describe(account)))
-                return false
-            }
+            guard account == .available else { return .unavailable(.unavailable(describe(account))) }
         } catch {
-            await owner?.setStatus(.error(error.localizedDescription))
-            return false
+            return .unavailable(.error(error.localizedDescription))
         }
-
         var configuration = CKSyncEngine.Configuration(
             database: container.privateCloudDatabase,
-            stateSerialization: stateSerialization,
-            delegate: self
+            stateSerialization: state,
+            delegate: host
         )
         configuration.automaticallySync = true
-        let engine = CKSyncEngine(configuration)
-        self.engine = engine
-
-        if createZone {
-            engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
-        }
-        if sendSettings {
-            enqueueSettings()
-        }
-        enqueue(intervalIDs: pendingIntervalIDs)
-        enqueue(correctionIDs: pendingCorrectionIDs)
-        await fetch()
-        return true
+        return .ready(LiveSyncEngine(engine: CKSyncEngine(configuration)))
     }
 
     private func seed(_ engine: CKSyncEngine) async {
@@ -94,26 +118,35 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
     }
 
     func fetch() async {
-        guard let engine else { return }
+        guard let driver else { return }
         do {
-            try await engine.fetchChanges()
-            await owner?.setStatus(.upToDate(Date()))
+            try await driver.fetchChanges()
+            await owner?.setStatus(.upToDate(Date()), from: self)
         } catch {
             await report(error)
         }
     }
 
     func enqueue(intervalIDs: [UUID]) {
-        engine?.state.add(pendingRecordZoneChanges: intervalIDs.map { .saveRecord(Self.recordID(for: $0)) })
+        add(intervalIDs.map { .saveRecord(Self.recordID(for: $0)) })
     }
 
     func enqueue(correctionIDs: [UUID]) {
-        guard !correctionIDs.isEmpty else { return }
-        engine?.state.add(pendingRecordZoneChanges: correctionIDs.map { .saveRecord(Self.correctionRecordID(for: $0)) })
+        add(correctionIDs.map { .saveRecord(Self.correctionRecordID(for: $0)) })
     }
 
     func enqueueSettings() {
-        engine?.state.add(pendingRecordZoneChanges: [.saveRecord(Self.settingsRecordID)])
+        add([.saveRecord(Self.settingsRecordID)])
+    }
+
+    /// To the engine, or held until `start()` has one.
+    private func add(_ changes: [CKSyncEngine.PendingRecordZoneChange]) {
+        guard !changes.isEmpty else { return }
+        if let driver {
+            driver.add(pendingRecordZoneChanges: changes)
+        } else {
+            buffered += changes
+        }
     }
 
     // MARK: - CKSyncEngineDelegate
@@ -121,7 +154,7 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
     func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
         switch event {
         case .stateUpdate(let update):
-            await owner?.saveState(update.stateSerialization)
+            await owner?.saveState(update.stateSerialization, from: self)
 
         case .accountChange(let change):
             await handleAccountChange(change, engine: syncEngine)
@@ -139,17 +172,17 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
 
         case .sentRecordZoneChanges(let sent):
             for record in sent.savedRecords where record.recordType == RecordType.settings {
-                await owner?.storeSettingsSystemFields(Self.systemFields(of: record))
+                await owner?.storeSettingsSystemFields(Self.systemFields(of: record), uploadedModifiedAt: record[Field.modifiedAt] as? Date)
             }
             await owner?.markUploaded(sent.savedRecords.compactMap { Self.intervalID(from: $0.recordID) })
             await owner?.markCorrectionsUploaded(sent.savedRecords.compactMap { Self.correctionID(from: $0.recordID) })
             await handleFailedSaves(sent.failedRecordSaves, engine: syncEngine)
 
         case .willFetchChanges, .willSendChanges:
-            await owner?.setStatus(.syncing)
+            await owner?.setStatus(.syncing, from: self)
 
         case .didFetchChanges, .didSendChanges:
-            await owner?.setStatus(.upToDate(Date()))
+            await owner?.setStatus(.upToDate(Date()), from: self)
 
         default:
             break
@@ -220,14 +253,46 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
         await owner?.applyFetched(corrections: corrections)
     }
 
+    /// What to do about one record CloudKit refused to save.
+    enum FailedSaveAction: Equatable {
+        /// Someone else wrote it: merge (settings) or count it uploaded (immutable records).
+        case resolveConflict
+        /// The zone is gone: recreate it, then save again.
+        case recreateZone
+        /// The server forgot the record we had a change tag for: save it fresh.
+        case saveFresh
+        /// Transient: the engine keeps it pending and retries by itself.
+        case engineRetries
+        /// The batch failed as a whole because of another record in it: this one is innocent, so
+        /// put it back in the queue.
+        case requeue
+        case quotaExceeded
+        /// Anything else: report it; the next launch's unsent set offers it again.
+        case report
+    }
+
+    static func action(for code: CKError.Code) -> FailedSaveAction {
+        switch code {
+        case .serverRecordChanged: return .resolveConflict
+        case .zoneNotFound: return .recreateZone
+        case .unknownItem: return .saveFresh
+        case .batchRequestFailed: return .requeue
+        case .networkFailure, .networkUnavailable, .zoneBusy, .serviceUnavailable,
+             .notAuthenticated, .operationCancelled, .requestRateLimited:
+            return .engineRetries
+        case .quotaExceeded: return .quotaExceeded
+        default: return .report
+        }
+    }
+
     private func handleFailedSaves(_ failures: [CKSyncEngine.Event.SentRecordZoneChanges.FailedRecordSave], engine: CKSyncEngine) async {
         var retry: [CKSyncEngine.PendingRecordZoneChange] = []
         var needsZone = false
 
         for failure in failures {
             let id = failure.record.recordID
-            switch failure.error.code {
-            case .serverRecordChanged:
+            switch Self.action(for: failure.error.code) {
+            case .resolveConflict:
                 if id == Self.settingsRecordID, let server = failure.error.serverRecord,
                    let data = server[Field.payload] as? Data, let remote = try? SyncedSettings.decode(data) {
                     // Someone else wrote the settings since we last saw them: newer edit wins.
@@ -238,25 +303,25 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
                 if let uuid = Self.intervalID(from: id) { await owner?.markUploaded([uuid]) }
                 if let uuid = Self.correctionID(from: id) { await owner?.markCorrectionsUploaded([uuid]) }
 
-            case .zoneNotFound:
+            case .recreateZone:
                 needsZone = true
                 retry.append(.saveRecord(id))
 
-            case .unknownItem:
-                // The record we had a change tag for was deleted on the server: save it fresh.
+            case .saveFresh:
                 if id == Self.settingsRecordID { await owner?.storeSettingsSystemFields(nil) }
                 retry.append(.saveRecord(id))
 
-            case .networkFailure, .networkUnavailable, .zoneBusy, .serviceUnavailable,
-                 .notAuthenticated, .operationCancelled, .requestRateLimited:
-                // The engine keeps these pending and retries on its own.
+            case .requeue:
+                retry.append(.saveRecord(id))
+
+            case .engineRetries:
                 break
 
             case .quotaExceeded:
-                await owner?.setStatus(.error("iCloud storage is full"))
+                await owner?.setStatus(.error("iCloud storage is full"), from: self)
 
-            default:
-                await owner?.setStatus(.error(failure.error.localizedDescription))
+            case .report:
+                await owner?.setStatus(.error(failure.error.localizedDescription), from: self)
             }
         }
 
@@ -277,7 +342,7 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
             await seed(engine)
         case .signOut:
             await owner?.resetForAccountChange()
-            await owner?.setStatus(.unavailable("Signed out of iCloud"))
+            await owner?.setStatus(.unavailable("Signed out of iCloud"), from: self)
         @unknown default:
             break
         }
@@ -287,16 +352,16 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
         if let ck = error as? CKError {
             switch ck.code {
             case .networkFailure, .networkUnavailable:
-                await owner?.setStatus(.error("Offline — will retry"))
+                await owner?.setStatus(.error("Offline — will retry"), from: self)
                 return
             case .notAuthenticated:
-                await owner?.setStatus(.unavailable("Not signed in to iCloud"))
+                await owner?.setStatus(.unavailable("Not signed in to iCloud"), from: self)
                 return
             default:
                 break
             }
         }
-        await owner?.setStatus(.error(error.localizedDescription))
+        await owner?.setStatus(.error(error.localizedDescription), from: self)
     }
 
     // MARK: - Record mapping
@@ -366,5 +431,28 @@ actor CloudSyncEngineHost: CKSyncEngineDelegate {
         case .couldNotDetermine: return "Couldn't reach iCloud"
         default: return "iCloud unavailable"
         }
+    }
+}
+
+/// The part of `CKSyncEngine` the host drives directly; a seam so start-up can be tested.
+protocol SyncEngineDriving: Sendable {
+    func add(pendingRecordZoneChanges: [CKSyncEngine.PendingRecordZoneChange])
+    func add(pendingDatabaseChanges: [CKSyncEngine.PendingDatabaseChange])
+    func fetchChanges() async throws
+}
+
+struct LiveSyncEngine: SyncEngineDriving {
+    let engine: CKSyncEngine
+
+    func add(pendingRecordZoneChanges: [CKSyncEngine.PendingRecordZoneChange]) {
+        engine.state.add(pendingRecordZoneChanges: pendingRecordZoneChanges)
+    }
+
+    func add(pendingDatabaseChanges: [CKSyncEngine.PendingDatabaseChange]) {
+        engine.state.add(pendingDatabaseChanges: pendingDatabaseChanges)
+    }
+
+    func fetchChanges() async throws {
+        try await engine.fetchChanges()
     }
 }

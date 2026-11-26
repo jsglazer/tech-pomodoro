@@ -73,23 +73,14 @@ final class AppController: ObservableObject {
     /// reduction is still on the stack, corrupting the state read after `handle(effects:)` returns.
     private var isPresentingPopup = false
 
-    private let focusSource = ActivityWatchSource()
-    /// `phaseStartedAt` of the Work interval being tracked. A new value means a new interval.
-    private var focusIntervalStart: Date?
-    private var focusActivity: FocusActivity?
-    private var manualAnchor: FocusProject?
-    private var driftAlertCount = 0
-    /// Set once the current off-anchor stretch has alerted; cleared when you get back on task, so
-    /// each stretch alerts once.
-    private var driftAlerted = false
-    private var lastFocusPoll: Date = .distantPast
-    /// Pauses within the tracked Work interval, closed, plus the one in progress. Paused time is
-    /// neutral for focus.
-    private var pausedSpans: [AwaySpan] = []
-    private var pauseStartedAt: Date?
-    private var focusPollInFlight = false
-    /// Seconds between ActivityWatch polls during Work.
-    private static let focusPollSeconds: TimeInterval = 5
+    /// Focus tracking of the Work interval in progress; its results are republished above.
+    private lazy var focusController: FocusController = {
+        let focus = FocusController(now: { [unowned self] in self.dateProvider.now() }, currentState: { [unowned self] in self.state })
+        focus.onUpdate = { [weak self] in self?.focusDidUpdate() }
+        focus.onDriftAlert = { [weak self] snapshot in self?.presentDriftAlert(snapshot) }
+        focus.canAlert = { [weak self] in !(self?.isPresentingPopup ?? true) }
+        return focus
+    }()
 
     /// Display refresh only. It never advances the timer by itself: every reduction is handed the
     /// date from `dateProvider`, and remaining time is always derived from `phaseEndsAt`.
@@ -277,6 +268,11 @@ final class AppController: ObservableObject {
             paperCorrections = corrections
             publishPaper()
         case .settings(let settings):
+            // The synced copy replaces any edit still being typed; committing that draft now would
+            // push it over the newer settings that just arrived.
+            draftCommitTask?.cancel()
+            draftCommitTask = nil
+            settingsDraft.discard()
             // Straight to the reducer: routing through `update(settings:)` would stamp it as a local
             // edit and push it straight back.
             send(.settingsChanged(settings))
@@ -301,15 +297,15 @@ final class AppController: ObservableObject {
         let previousTag = state.paperTag
         state = PomodoroReducer.reduce(state, event, now)
         if state.paperTag != previousTag { paperTagStore.save(state.paperTag) }
-        notePause(from: previousActivity, to: state.activity, at: now)
+        focusController.notePause(from: previousActivity, to: state.activity, at: now)
         notePaper(state.pendingRecords)
         // The record of a Work interval that just ended takes its focus summary before tracking moves
         // on to whatever phase began, and before a boundary popup wants to quote it.
-        let records = attachFocus(to: state.pendingRecords)
+        let records = focusController.attach(to: state.pendingRecords)
         trackFocusInterval()
         handle(effects: state.pendingEffects)
         persist(records: records, at: now)
-        pollFocusIfDue(at: now)
+        focusController.pollIfDue(at: now)
         showPhoneTimer(at: now)
         refreshPresentation()
         mirror.stateDidChange(state, at: now)
@@ -326,11 +322,45 @@ final class AppController: ObservableObject {
         }
     }
 
+    /// Settings shown at once but not yet committed (see `draft(settings:)`).
+    private var settingsDraft = SettingsDraft()
+    private var draftCommitTask: Task<Void, Never>?
+    /// How long editing must pause before a drafted change commits.
+    static let draftCommitDelay: Duration = .seconds(1)
+
+    /// A discrete change (a toggle, a stepper, a menu): saved, synced and acted on now.
     func update(settings newSettings: PomodoroSettings) {
-        let old = state.settings
+        commitSettingsDraft()
+        apply(from: state.settings, to: newSettings)
+    }
+
+    /// A continuous edit — a keystroke in a text field, a tick of a colour drag. The timer and the
+    /// views see it at once; saving, syncing and the side effects wait until editing pauses, so one
+    /// edit is one save and one CloudKit upload rather than one per keystroke.
+    func draft(settings newSettings: PomodoroSettings) {
+        guard newSettings != state.settings else { return }
+        settingsDraft.edit(replacing: state.settings)
+        send(.settingsChanged(newSettings))
+        draftCommitTask?.cancel()
+        draftCommitTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.draftCommitDelay)
+            guard !Task.isCancelled else { return }
+            self?.commitSettingsDraft()
+        }
+    }
+
+    /// Commits a pending draft now: on the debounce, before any discrete change, and on quit.
+    func commitSettingsDraft() {
+        draftCommitTask?.cancel()
+        draftCommitTask = nil
+        guard let change = settingsDraft.commit(current: state.settings) else { return }
+        apply(from: change.old, to: change.new, alreadyShown: true)
+    }
+
+    private func apply(from old: PomodoroSettings, to newSettings: PomodoroSettings, alreadyShown: Bool = false) {
         settingsStore.save(newSettings)
         cloudSync?.settingsChanged(from: old, to: newSettings)
-        send(.settingsChanged(newSettings))
+        if !alreadyShown { send(.settingsChanged(newSettings)) }
         if old.cloudSyncEnabled != newSettings.cloudSyncEnabled {
             cloudSync?.setEnabled(newSettings.cloudSyncEnabled)
         }
@@ -382,7 +412,7 @@ final class AppController: ObservableObject {
                     .split(whereSeparator: { $0 == "," || $0 == " " })
                     .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: ". ")).lowercased() }
                     .filter { !$0.isEmpty }
-                self.update(settings: settings)
+                self.draft(settings: settings)
             }
         )
     }
@@ -407,6 +437,18 @@ final class AppController: ObservableObject {
                 var settings = self.state.settings
                 settings[keyPath: keyPath] = newValue
                 self.update(settings: settings)
+            }
+        )
+    }
+
+    /// `bind(_:)` for a text field: each keystroke is drafted, committed once typing pauses.
+    func bindText(_ keyPath: WritableKeyPath<PomodoroSettings, String>) -> Binding<String> {
+        Binding(
+            get: { self.state.settings[keyPath: keyPath] },
+            set: { newValue in
+                var settings = self.state.settings
+                settings[keyPath: keyPath] = newValue
+                self.draft(settings: settings)
             }
         )
     }
@@ -446,7 +488,7 @@ final class AppController: ObservableObject {
             set: { newValue in
                 var settings = self.state.settings
                 settings[keyPath: keyPath] = newValue.components(separatedBy: "\n")
-                self.update(settings: settings)
+                self.draft(settings: settings)
             }
         )
     }
@@ -459,7 +501,7 @@ final class AppController: ObservableObject {
             set: { newValue in
                 var settings = self.state.settings
                 settings[keyPath: keyPath] = Theme.hexString(NSColor(newValue))
-                self.update(settings: settings)
+                self.draft(settings: settings)
             }
         )
     }
@@ -571,20 +613,27 @@ final class AppController: ObservableObject {
     // MARK: - Focus
 
     /// Projects seen so far this interval, most time first, for the anchor override menu.
-    var focusProjects: [FocusProject] {
-        guard let focus else { return [] }
-        var totals: [FocusProject: TimeInterval] = [:]
-        for (project, seconds) in focus.projectSeconds {
-            totals[project.at(settings.focus.driftLevel), default: 0] += seconds
-        }
-        return totals.sorted { $0.value > $1.value }.map(\.key)
-    }
+    var focusProjects: [FocusProject] { focusController.projects }
 
     /// Pins the anchor by hand for the rest of this interval; nil goes back to inferring it.
     func setAnchor(_ project: FocusProject?) {
-        manualAnchor = project
-        driftAlerted = false
-        recomputeFocus()
+        focusController.setAnchor(project)
+    }
+
+    /// Republishes what `FocusController` holds, and redraws the menu bar with it.
+    private func focusDidUpdate() {
+        if focus != focusController.snapshot { focus = focusController.snapshot }
+        if focusStatus != focusController.status { focusStatus = focusController.status }
+        if lastFocusLine != focusController.lastLine { lastFocusLine = focusController.lastLine }
+        refreshPresentation()
+    }
+
+    private func trackFocusInterval() {
+        focusController.trackInterval()
+        // Republished without a redraw: `send` redraws once at the end of the reduction.
+        if focus != focusController.snapshot { focus = focusController.snapshot }
+        if focusStatus != focusController.status { focusStatus = focusController.status }
+        if lastFocusLine != focusController.lastLine { lastFocusLine = focusController.lastLine }
     }
 
     /// Per-task totals from the history, for the popover.
@@ -753,115 +802,8 @@ final class AppController: ObservableObject {
         lastPaperLine = "Paper · \(PaperTag(className: paper.className, kind: paper.kind).shortLabel) · \(minutes) min"
     }
 
-    private var isTrackingFocus: Bool {
-        settings.focus.enabled && state.activity != .idle && state.phase == .work
-    }
-
-    /// Hands the tracked interval's summary to its work record. Only the record that starts where the
-    /// tracked interval started gets one: a sleep catch-up can close several intervals at once, and
-    /// the earlier ones were never watched.
-    private func attachFocus(to records: [IntervalRecord]) -> [IntervalRecord] {
-        guard let start = focusIntervalStart, let focus else { return records }
-        return records.map { record in
-            guard record.kind == .work, record.startedAt == start else { return record }
-            var record = record
-            let summary = focus.summary(level: settings.focus.driftLevel, driftAlerts: driftAlertCount)
-            record.focus = summary
-            lastFocusLine = summary.lineText
-            return record
-        }
-    }
-
-    /// Records pause spans so focus can treat them as neutral.
-    private func notePause(from old: PomodoroState.Activity, to new: PomodoroState.Activity, at now: Date) {
-        if new == .paused, old != .paused {
-            pauseStartedAt = now
-        } else if old == .paused, new != .paused, let start = pauseStartedAt {
-            pausedSpans.append(AwaySpan(start: start, end: now))
-            pauseStartedAt = nil
-        }
-    }
-
-    /// The pauses of the tracked interval, the open one running to `now`.
-    private func pauses(at now: Date) -> [AwaySpan] {
-        guard let open = pauseStartedAt, now > open else { return pausedSpans }
-        return pausedSpans + [AwaySpan(start: open, end: now)]
-    }
-
-    /// Starts tracking afresh whenever a new Work interval begins, and stops outside Work.
-    private func trackFocusInterval() {
-        // A paper tag change splits a Work interval into records; each is tracked on its own.
-        let start = isTrackingFocus ? (state.workRecordStartedAt ?? state.phaseStartedAt) : nil
-        guard start != focusIntervalStart else { return }
-        focusIntervalStart = start
-        pausedSpans = []
-        if state.activity != .paused { pauseStartedAt = nil }
-        focus = nil
-        focusActivity = nil
-        manualAnchor = nil
-        driftAlertCount = 0
-        driftAlerted = false
-        lastFocusPoll = .distantPast
-        if !settings.focus.enabled {
-            focusStatus = "Off"
-        } else if start == nil {
-            focusStatus = "Waiting for Work"
-        } else {
-            focusStatus = "Connecting…"
-        }
-    }
-
-    private func pollFocusIfDue(at now: Date) {
-        guard isTrackingFocus, state.activity == .running, let start = focusIntervalStart,
-              !focusPollInFlight, now.timeIntervalSince(lastFocusPoll) >= Self.focusPollSeconds else { return }
-        lastFocusPoll = now
-        focusPollInFlight = true
-        let server = settings.focus.serverURL
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { self.focusPollInFlight = false }
-            do {
-                let activity = try await self.focusSource.fetch(server: server, from: start, to: self.dateProvider.now())
-                // The interval may have ended while the request was out.
-                guard self.focusIntervalStart == start else { return }
-                self.focusActivity = activity
-                self.focusStatus = "Live"
-                self.recomputeFocus()
-            } catch {
-                guard self.focusIntervalStart == start else { return }
-                self.focusStatus = "Offline — \(error.localizedDescription)"
-            }
-        }
-    }
-
-    private func recomputeFocus() {
-        guard let start = focusIntervalStart, let activity = focusActivity else { return }
-        let snapshot = FocusTracker.snapshot(
-            activity: activity,
-            from: start,
-            to: dateProvider.now(),
-            settings: settings.focus,
-            manualAnchor: manualAnchor,
-            paused: pauses(at: dateProvider.now()),
-            paperClass: state.phase == .work ? state.paperTag?.className : nil
-        )
-        focus = snapshot
-        checkDrift(snapshot)
-        refreshPresentation()
-    }
-
-    /// One alert per stretch off the anchor, once it has run `driftAlertSeconds`.
-    private func checkDrift(_ snapshot: FocusSnapshot) {
-        guard snapshot.isDrifting else {
-            driftAlerted = false
-            return
-        }
-        let threshold = settings.focus.driftAlertSeconds
-        guard threshold > 0, !driftAlerted, !isPresentingPopup, state.activity == .running,
-              snapshot.offAnchorSeconds >= TimeInterval(threshold) else { return }
-        driftAlerted = true
-        driftAlertCount += 1
-
+    /// The drift alert `FocusController` decided is due.
+    private func presentDriftAlert(_ snapshot: FocusSnapshot) {
         if settings.dingEnabled {
             soundPlayer.play(named: settings.soundName, times: settings.dingRepeatCount)
         }
